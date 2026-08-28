@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Lab Progress Board"
+description = "A weekly Kanban photo synthesis dashboard for research lab teachers to track student group progress, spot blockers, and compare project momentum over time."
+version = "1.0.0"
+id = "artifacts/lab-progress-board"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23288
+
+[services.development]
+run = "pnpm --filter @workspace/lab-progress-board run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/lab-progress-board", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/lab-progress-board/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23288"
+BASE_PATH = "/"
