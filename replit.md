@@ -1,6 +1,6 @@
-# [Project name]
+# Lab Progress Board
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A weekly Kanban photo synthesis dashboard for research lab teachers to track student group progress and follow up on blockers.
 
 ## Run & Operate
 
@@ -22,23 +22,32 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/lab-progress-board/src/App.tsx` — responsive dashboard, group directory, group detail, snapshot archive, and photo synthesis UI
+- `artifacts/lab-progress-board/src/index.css` — shared app theme and visual language
+- `lib/api-spec/openapi.yaml` — source of truth for dashboard, groups, history, snapshots, and synthesis contracts
+- `artifacts/api-server/src/routes/progress.ts` — seeded progress data, persistence, history aggregation, and OpenAI photo synthesis
+- `lib/db/src/schema/lab-progress.ts` — PostgreSQL tables for groups and weekly snapshots
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Board photos are sent to the synthesis endpoint as data URLs for the current MVP; the database stores the extracted weekly summary and group state rather than image bytes.
+- The backend owns the latest group state and snapshot history so dashboard views remain useful after reloads and across sessions.
+- AI output is constrained to a compact JSON shape and validated before it is written to the database.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Overview dashboard with lab-level progress, four-week trend, group pulse, and teacher attention signals.
+- Weekly photo upload flow that sends a board image to OpenAI vision for structured progress synthesis.
+- Searchable groups directory, group creation, per-group history, and weekly snapshot archive.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+No project-specific preferences recorded.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The photo synthesis route requires `OPENAI_API_KEY` in the workspace secrets.
+- The app workflow provides `PORT` and `BASE_PATH`; manual Vite production builds need those values set.
 
 ## Pointers
 

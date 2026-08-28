@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: progress
+    description: Lab project progress operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,109 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [progress]
+      summary: Get the teacher dashboard
+      description: Returns the current lab overview, trend data, and attention items.
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /groups:
+    get:
+      operationId: getGroups
+      tags: [progress]
+      summary: List student groups
+      responses:
+        "200":
+          description: Student groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentGroup"
+    post:
+      operationId: createGroup
+      tags: [progress]
+      summary: Create a student group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupInput"
+      responses:
+        "201":
+          description: Created group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentGroup"
+  /groups/{id}/history:
+    get:
+      operationId: getGroupHistory
+      tags: [progress]
+      summary: Get a group's progress history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Group progress history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GroupHistoryPoint"
+        "404":
+          description: Group not found
+  /snapshots:
+    get:
+      operationId: getSnapshots
+      tags: [progress]
+      summary: List weekly board snapshots
+      responses:
+        "200":
+          description: Weekly snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Snapshot"
+  /snapshots/synthesize:
+    post:
+      operationId: synthesizeSnapshot
+      tags: [progress]
+      summary: Synthesize a Kanban board photo
+      description: Reads a board photo and produces structured group progress, blockers, and next steps.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SnapshotInput"
+      responses:
+        "201":
+          description: Synthesized snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+        "400":
+          description: Invalid board photo
+        "500":
+          description: Synthesis failed
 components:
   schemas:
     HealthStatus:
@@ -33,4 +138,134 @@ components:
           type: string
       required:
         - status
+    StudentGroup:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        project:
+          type: string
+        students:
+          type: array
+          items:
+            type: string
+        color:
+          type: string
+        status:
+          type: string
+          enum: [On track, Needs attention, Blocked, Complete]
+        progress:
+          type: number
+        currentFocus:
+          type: string
+        blocker:
+          type: ["string", "null"]
+        lastUpdated:
+          type: string
+          format: date
+      required: [id, name, project, students, color, status, progress, currentFocus, lastUpdated]
+    GroupInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        project:
+          type: string
+          minLength: 1
+        students:
+          type: array
+          items:
+            type: string
+        color:
+          type: string
+      required: [name, project, students]
+    GroupHistoryPoint:
+      type: object
+      properties:
+        week:
+          type: string
+        progress:
+          type: number
+        todo:
+          type: number
+        doing:
+          type: number
+        done:
+          type: number
+      required: [week, progress, todo, doing, done]
+    Snapshot:
+      type: object
+      properties:
+        id:
+          type: string
+        weekOf:
+          type: string
+          format: date
+        fileName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentGroup"
+        summary:
+          type: string
+        wins:
+          type: array
+          items:
+            type: string
+        attentionItems:
+          type: array
+          items:
+            type: string
+      required: [id, weekOf, fileName, createdAt, groups, summary, wins, attentionItems]
+    SnapshotInput:
+      type: object
+      properties:
+        weekOf:
+          type: string
+          format: date
+        fileName:
+          type: string
+          minLength: 1
+        imageDataUrl:
+          type: string
+          minLength: 20
+      required: [weekOf, fileName, imageDataUrl]
+    Dashboard:
+      type: object
+      properties:
+        weekOf:
+          type: string
+          format: date
+        totalGroups:
+          type: number
+        onTrack:
+          type: number
+        needsAttention:
+          type: number
+        averageProgress:
+          type: number
+        progressDelta:
+          type: number
+        summary:
+          type: string
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentGroup"
+        trend:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupHistoryPoint"
+        attentionItems:
+          type: array
+          items:
+            type: string
+      required: [weekOf, totalGroups, onTrack, needsAttention, averageProgress, progressDelta, summary, groups, trend, attentionItems]
 
