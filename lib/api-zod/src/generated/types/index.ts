@@ -13,4 +13,5 @@ export * from './healthStatus';
 export * from './snapshot';
 export * from './snapshotInput';
 export * from './studentGroup';
+export * from './studentGroupPhase';
 export * from './studentGroupStatus';

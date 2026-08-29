@@ -19,6 +19,21 @@ export const StudentGroupStatus = {
   Complete: 'Complete',
 } as const;
 
+/**
+ * @nullable
+ */
+export type StudentGroupPhase = typeof StudentGroupPhase[keyof typeof StudentGroupPhase] | null;
+
+
+export const StudentGroupPhase = {
+  background_research: 'background research',
+  project_design: 'project design',
+  materials_and_approval: 'materials and approval',
+  Research_set_up: 'Research set up',
+  data_collection: 'data collection',
+  data_analysis: 'data analysis',
+} as const;
+
 export interface StudentGroup {
   id: string;
   name: string;
@@ -29,7 +44,11 @@ export interface StudentGroup {
   progress: number;
   currentFocus: string;
   /** @nullable */
-  blocker?: string | null;
+  blocker: string | null;
+  /** @nullable */
+  phase: StudentGroupPhase;
+  /** @nullable */
+  summary: string | null;
   lastUpdated: string;
 }
 

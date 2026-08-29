@@ -162,10 +162,15 @@ components:
           type: string
         blocker:
           type: ["string", "null"]
+        phase:
+          type: ["string", "null"]
+          enum: [background research, project design, materials and approval, Research set up, data collection, data analysis, null]
+        summary:
+          type: ["string", "null"]
         lastUpdated:
           type: string
           format: date
-      required: [id, name, project, students, color, status, progress, currentFocus, lastUpdated]
+      required: [id, name, project, students, color, status, progress, currentFocus, blocker, phase, summary, lastUpdated]
     GroupInput:
       type: object
       properties:

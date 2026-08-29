@@ -38,7 +38,9 @@ export const GetDashboardResponse = zod.object({
   "status": zod.enum(['On track', 'Needs attention', 'Blocked', 'Complete']),
   "progress": zod.number(),
   "currentFocus": zod.string(),
-  "blocker": zod.string().nullish(),
+  "blocker": zod.string().nullable(),
+  "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
+  "summary": zod.string().nullable(),
   "lastUpdated": zod.coerce.date()
 })),
   "trend": zod.array(zod.object({
@@ -64,7 +66,9 @@ export const GetGroupsResponseItem = zod.object({
   "status": zod.enum(['On track', 'Needs attention', 'Blocked', 'Complete']),
   "progress": zod.number(),
   "currentFocus": zod.string(),
-  "blocker": zod.string().nullish(),
+  "blocker": zod.string().nullable(),
+  "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
+  "summary": zod.string().nullable(),
   "lastUpdated": zod.coerce.date()
 })
 export const GetGroupsResponse = zod.array(GetGroupsResponseItem)
@@ -93,7 +97,9 @@ export const CreateGroupResponse = zod.object({
   "status": zod.enum(['On track', 'Needs attention', 'Blocked', 'Complete']),
   "progress": zod.number(),
   "currentFocus": zod.string(),
-  "blocker": zod.string().nullish(),
+  "blocker": zod.string().nullable(),
+  "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
+  "summary": zod.string().nullable(),
   "lastUpdated": zod.coerce.date()
 })
 
@@ -132,7 +138,9 @@ export const GetSnapshotsResponseItem = zod.object({
   "status": zod.enum(['On track', 'Needs attention', 'Blocked', 'Complete']),
   "progress": zod.number(),
   "currentFocus": zod.string(),
-  "blocker": zod.string().nullish(),
+  "blocker": zod.string().nullable(),
+  "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
+  "summary": zod.string().nullable(),
   "lastUpdated": zod.coerce.date()
 })),
   "summary": zod.string(),
@@ -171,7 +179,9 @@ export const SynthesizeSnapshotResponse = zod.object({
   "status": zod.enum(['On track', 'Needs attention', 'Blocked', 'Complete']),
   "progress": zod.number(),
   "currentFocus": zod.string(),
-  "blocker": zod.string().nullish(),
+  "blocker": zod.string().nullable(),
+  "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
+  "summary": zod.string().nullable(),
   "lastUpdated": zod.coerce.date()
 })),
   "summary": zod.string(),

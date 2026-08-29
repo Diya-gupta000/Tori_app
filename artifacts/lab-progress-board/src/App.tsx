@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
 import {
   ArrowLeft, ArrowRight, Beaker, CircleAlert,
-  CircleCheck, ClipboardList, CloudUpload, FileImage, Filter, History, Home,
+  CircleCheck, CloudUpload, FileImage, Filter, History, Home,
   Menu, MoreHorizontal, Plus, Search, Sparkles, Target, TrendingUp, Users, X,
 } from 'lucide-react';
 import {
@@ -81,8 +81,8 @@ function AppShell({ children }: { children: ReactNode }) {
           <p className="mono mt-2 text-[10px] text-sidebar-foreground/45">weekly rhythm · active</p>
         </div>
         <div className="mt-5 flex items-center gap-3 px-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] text-xs font-bold text-foreground">MS</div>
-          <div className="min-w-0"><div className="truncate text-xs font-semibold">Mara Sato</div><div className="text-[10px] text-sidebar-foreground/45">Lab teacher</div></div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] text-xs font-bold text-foreground">VJ</div>
+          <div className="min-w-0"><div className="truncate text-xs font-semibold">Victoria Johnson</div><div className="text-[10px] text-sidebar-foreground/45">Lab teacher</div></div>
           <button type="button" aria-label="Open profile menu" data-testid="button-profile-menu" className="ml-auto text-sidebar-foreground/45 hover:text-sidebar-foreground"><MoreHorizontal size={16} /></button>
         </div>
       </aside>
@@ -95,7 +95,7 @@ function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--accent))]" />Sync is current</div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">MS</div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">VJ</div>
           </div>
         </header>
         <main className="mx-auto max-w-[1400px] px-5 py-8 md:px-9 lg:px-12">{children}</main>
@@ -150,7 +150,7 @@ function TrendChart({ trend }: { trend: GroupHistoryPoint[] }) {
 
 function GroupRow({ group, compact = false }: { group: StudentGroup; compact?: boolean }) {
   return <Link href={`/groups/${group.id}`} data-testid={`link-group-${group.id}`} className={cn('group block lab-card lab-transition rounded-xl p-4', compact && 'p-3.5')}>
-    <div className="flex items-start gap-3"><div className="mt-0.5 h-8 w-1 rounded-full" style={{ backgroundColor: group.color || 'hsl(var(--accent))' }} /><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate text-[13px] font-bold tracking-[-.01em]">{group.name}</h3><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{group.project}</p></div><StatusPill status={group.status} /></div><div className="mt-4 flex items-center gap-3"><ProgressBar value={group.progress} /><span className="mono text-[10px] font-medium text-muted-foreground">{group.progress}%</span></div>{!compact && <div className="mt-3 flex items-center justify-between gap-4 text-[11px]"><span className="truncate text-muted-foreground"><span className="font-semibold text-foreground">Focus:</span> {group.currentFocus}</span><ArrowRight size={14} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1" /></div>}</div></div>
+    <div className="flex items-start gap-3"><div className="mt-0.5 h-8 w-1 rounded-full" style={{ backgroundColor: group.color || 'hsl(var(--accent))' }} /><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate text-[13px] font-bold tracking-[-.01em]">{group.name}</h3><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{group.project || 'Project details pending'}</p></div><StatusPill status={group.status} /></div><div className="mt-4 flex items-center gap-3"><ProgressBar value={group.progress} /><span className="mono text-[10px] font-medium text-muted-foreground">{group.progress}%</span></div>{!compact && <div className="mt-3 flex items-center justify-between gap-4 text-[11px]"><span className="truncate text-muted-foreground"><span className="font-semibold text-foreground">Focus:</span> {group.currentFocus || 'Pending next board photo'}</span><ArrowRight size={14} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1" /></div>}</div></div>
   </Link>;
 }
 
@@ -211,9 +211,8 @@ function DashboardPage() {
       <MetricCard label="Needs a look" value={dashboard.needsAttention} detail="groups with a soft signal" accent="sand" icon={<Target size={16} />} />
       <MetricCard label="Total groups" value={dashboard.totalGroups} detail="across this studio" accent="ink" icon={<Users size={16} />} />
     </div>
-    <div className="mt-5 grid gap-5 xl:grid-cols-[1.45fr_.85fr]">
-      <section className="lab-card rounded-xl p-5 md:p-6" data-testid="section-progress-radar"><div className="flex items-start justify-between"><div><div className="eyebrow">Progress radar</div><h2 className="serif mt-1 text-2xl">Momentum is building</h2></div><span className="mono rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground">4 WEEKS</span></div><TrendChart trend={dashboard.trend} /></section>
-      <section className="grid-paper rounded-xl border border-border bg-[hsl(var(--accent)/.16)] p-5 md:p-6" data-testid="section-weekly-note"><div className="flex items-center gap-2"><ClipboardList size={16} /><div className="eyebrow !text-foreground/60">Teacher's note</div></div><p className="serif mt-6 text-[24px] leading-[1.25] tracking-[-.02em]">“Small, visible steps are carrying the room forward.”</p><div className="mt-8 flex items-center justify-between border-t border-foreground/10 pt-4"><span className="text-xs text-foreground/65">Last synthesis</span><span className="mono text-[10px]">{formatDate(dashboard.weekOf)}</span></div></section>
+     <div className="mt-5 grid gap-5 xl:grid-cols-1">
+       <section className="lab-card rounded-xl p-5 md:p-6" data-testid="section-progress-radar"><div className="flex items-start justify-between"><div><div className="eyebrow">Progress radar</div><h2 className="serif mt-1 text-2xl">Momentum is building</h2></div><span className="mono rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground">4 WEEKS</span></div><TrendChart trend={dashboard.trend} /></section>
     </div>
     <div className="mt-8 grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
       <section><div className="mb-3 flex items-center justify-between"><div><div className="eyebrow">Group pulse</div><h2 className="serif mt-1 text-2xl">Where attention belongs</h2></div><Link href="/groups" data-testid="link-view-all-groups" className="focus-ring inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground">View all <ArrowRight size={14} /></Link></div><div className="grid gap-3 sm:grid-cols-2">{(dashboard.groups || []).slice(0, 4).map((group) => <GroupRow key={group.id} group={group} />)}</div>{!dashboard.groups?.length && <EmptyState kind="groups" />}</section>
@@ -269,7 +268,54 @@ function GroupDetailPage() {
   if (groupsQuery.isLoading || historyQuery.isLoading) return <LoadingState label="Opening group history" />;
   if (groupsQuery.isError || historyQuery.isError || !group) return <ErrorState onRetry={() => { groupsQuery.refetch(); historyQuery.refetch(); }} message={!group ? 'This group is not in the current notebook.' : undefined} />;
   const history = historyQuery.data || [];
-  return <div className="page-enter"><Link href="/groups" data-testid="link-back-groups" className="focus-ring mb-7 inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft size={14} />All groups</Link><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div className="flex items-start gap-4"><div className="mt-1 h-12 w-1.5 rounded-full" style={{ backgroundColor: group.color || 'hsl(var(--accent))' }} /><div><div className="eyebrow">Group dossier</div><h1 className="serif mt-1 text-[36px] leading-none tracking-[-.04em]">{group.name}</h1><p className="mt-2 text-sm text-muted-foreground">{group.project}</p></div></div><StatusPill status={group.status} /></div><div className="mt-8 grid gap-5 xl:grid-cols-[1.35fr_.65fr]"><section className="lab-card rounded-xl p-5 md:p-6"><div className="flex items-start justify-between"><div><div className="eyebrow">Progress history</div><h2 className="serif mt-1 text-2xl">The shape of the work</h2></div><div className="mono text-[24px]">{group.progress}<span className="text-sm text-muted-foreground">%</span></div></div><HistoryChart history={history} /></section><section className="space-y-4"><div className="rounded-xl bg-primary p-5 text-primary-foreground"><div className="eyebrow !text-primary-foreground/55">Current focus</div><p className="serif mt-4 text-[22px] leading-tight">{group.currentFocus || 'Waiting for the next board read.'}</p><div className="mt-7 flex items-center gap-3"><ProgressBar value={group.progress} color="bg-sidebar-primary" /><span className="mono text-[10px]">{group.progress}%</span></div></div><div className="lab-card rounded-xl p-5"><div className="eyebrow">People in the room</div><div className="mt-4 flex flex-wrap gap-2">{group.students.map((student) => <span key={student} className="rounded-full bg-muted px-2.5 py-1.5 text-[11px] font-medium">{student}</span>)}</div></div>{group.blocker && <div className="rounded-xl border border-[hsl(var(--destructive)/.25)] bg-[hsl(var(--destructive)/.06)] p-5"><div className="flex items-center gap-2 text-xs font-bold text-destructive"><CircleAlert size={15} />Blocker noted</div><p className="mt-3 text-sm leading-6">{group.blocker}</p></div>}</section></div><section className="mt-8"><div className="mb-3 flex items-end justify-between"><div><div className="eyebrow">Extracted work items</div><h2 className="serif mt-1 text-2xl">What is moving</h2></div><span className="mono text-[10px] text-muted-foreground">LATEST BOARD</span></div><div className="grid gap-3 sm:grid-cols-3"><WorkColumn label="To do" count={history.at(-1)?.todo || 0} tone="bg-muted" /><WorkColumn label="Doing" count={history.at(-1)?.doing || 0} tone="bg-[hsl(var(--secondary)/.24)]" /><WorkColumn label="Done" count={history.at(-1)?.done || 0} tone="bg-[hsl(var(--accent)/.28)]" /></div></section></div>;
+  return <div className="page-enter">
+    <Link href="/groups" data-testid="link-back-groups" className="focus-ring mb-7 inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft size={14} />All groups</Link>
+    <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+      <div className="flex items-start gap-4">
+        <div className="mt-1 h-12 w-1.5 rounded-full" style={{ backgroundColor: group.color || 'hsl(var(--accent))' }} />
+        <div>
+          <div className="eyebrow">Group dossier</div>
+          <h1 className="serif mt-1 text-[36px] leading-none tracking-[-.04em]">{group.name}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{group.project || 'Project details pending'}</p>
+        </div>
+      </div>
+      <StatusPill status={group.status} />
+    </div>
+    <div className="mt-8 grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
+      <section className="lab-card rounded-xl p-5 md:p-6">
+        <div className="flex items-start justify-between">
+          <div><div className="eyebrow">Progress history</div><h2 className="serif mt-1 text-2xl">The shape of the work</h2></div>
+          <div className="mono text-[24px]">{group.progress}<span className="text-sm text-muted-foreground">%</span></div>
+        </div>
+        <HistoryChart history={history} />
+      </section>
+      <section className="space-y-4">
+        <div className="rounded-xl bg-primary p-5 text-primary-foreground">
+          <div className="eyebrow !text-primary-foreground/55">Current focus</div>
+          <p className="serif mt-4 text-[22px] leading-tight">{group.currentFocus || 'Waiting for the next board photo.'}</p>
+          <div className="mt-7 flex items-center gap-3"><ProgressBar value={group.progress} color="bg-sidebar-primary" /><span className="mono text-[10px]">{group.progress}%</span></div>
+        </div>
+        <div className="lab-card rounded-xl p-5">
+          <div className="eyebrow">Current phase</div>
+          <p className="serif mt-3 text-xl">{group.phase || 'Not captured yet'}</p>
+        </div>
+        <div className="lab-card rounded-xl p-5">
+          <div className="eyebrow">People in the room</div>
+          <div className="mt-4 flex flex-wrap gap-2">{group.students.map((student) => <span key={student} className="rounded-full bg-muted px-2.5 py-1.5 text-[11px] font-medium">{student}</span>)}</div>
+        </div>
+        {group.blocker && <div className="rounded-xl border border-[hsl(var(--destructive)/.25)] bg-[hsl(var(--destructive)/.06)] p-5"><div className="flex items-center gap-2 text-xs font-bold text-destructive"><CircleAlert size={15} />Blocker noted</div><p className="mt-3 text-sm leading-6">{group.blocker}</p></div>}
+      </section>
+    </div>
+    <section className="mt-8 lab-card rounded-xl p-5 md:p-6">
+      <div className="eyebrow">Kanban summary</div>
+      <h2 className="serif mt-1 text-2xl">What the board is saying</h2>
+      <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground">{group.summary || 'A one- to two-sentence summary will appear here after a new board photo is synthesized.'}</p>
+    </section>
+    <section className="mt-8">
+      <div className="mb-3 flex items-end justify-between"><div><div className="eyebrow">Extracted work items</div><h2 className="serif mt-1 text-2xl">What is moving</h2></div><span className="mono text-[10px] text-muted-foreground">LATEST BOARD</span></div>
+      <div className="grid gap-3 sm:grid-cols-3"><WorkColumn label="To do" count={history.at(-1)?.todo || 0} tone="bg-muted" /><WorkColumn label="Doing" count={history.at(-1)?.doing || 0} tone="bg-[hsl(var(--secondary)/.24)]" /><WorkColumn label="Done" count={history.at(-1)?.done || 0} tone="bg-[hsl(var(--accent)/.28)]" /></div>
+    </section>
+  </div>;
 }
 
 function HistoryChart({ history }: { history: GroupHistoryPoint[] }) {

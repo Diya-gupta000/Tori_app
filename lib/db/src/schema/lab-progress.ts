@@ -13,6 +13,8 @@ export const labGroupsTable = pgTable("lab_groups", {
   progress: integer("progress").notNull().default(0),
   currentFocus: text("current_focus").notNull().default(""),
   blocker: text("blocker"),
+  phase: varchar("phase", { length: 64 }),
+  summary: text("summary"),
   lastUpdated: varchar("last_updated", { length: 10 }).notNull(),
 });
 

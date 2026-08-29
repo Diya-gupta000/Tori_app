@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { StudentGroupPhase } from './studentGroupPhase';
 import type { StudentGroupStatus } from './studentGroupStatus';
 
 export interface StudentGroup {
@@ -17,6 +18,10 @@ export interface StudentGroup {
   progress: number;
   currentFocus: string;
   /** @nullable */
-  blocker?: string | null;
+  blocker: string | null;
+  /** @nullable */
+  phase: StudentGroupPhase;
+  /** @nullable */
+  summary: string | null;
   lastUpdated: Date;
 }
