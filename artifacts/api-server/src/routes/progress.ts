@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq } from "drizzle-orm";
 import OpenAI from "openai";
 import {
   CreateGroupBody,
+  SynthesizeGroupSnapshotBody,
   SynthesizeSnapshotBody,
 } from "@workspace/api-zod";
 import { db, labGroupsTable, snapshotsTable } from "@workspace/db";
@@ -484,6 +485,84 @@ router.post("/groups", async (req, res) => {
   res.status(201).json(group);
 });
 
+router.post("/groups/:id/synthesize", async (req, res) => {
+  const parsed = SynthesizeGroupSnapshotBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "A group photo, file name, and week are required." });
+    return;
+  }
+
+  const existing = await db
+    .select()
+    .from(labGroupsTable)
+    .where(eq(labGroupsTable.id, req.params.id));
+  if (!existing[0]) {
+    res.status(404).json({ error: "Group not found." });
+    return;
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    res.status(503).json({ error: "Photo synthesis is not configured yet." });
+    return;
+  }
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.4-mini",
+      max_completion_tokens: 4096,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a research lab mentor assistant. Read this single group's Kanban board photo carefully. Return only valid JSON with project (string), students (array of strings), status (On track, Needs attention, Blocked, or Complete), progress (number 0-100), currentFocus (string), blocker (string or null), phase (one of background research, project design, materials and approval, Research set up, data collection, or data analysis; use null when unclear), and summary (a concise sentence or two covering all visible Kanban work; use null if the board is unreadable). Keep the response grounded in visible cards and do not invent details.",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Synthesize the Kanban board photo for the group "${existing[0].name}" for the week of ${parsed.data.weekOf.toISOString().slice(0, 10)}. The uploaded file is ${parsed.data.fileName}.`,
+            },
+            {
+              type: "image_url",
+              image_url: { url: parsed.data.imageDataUrl },
+            },
+          ],
+        },
+      ],
+    });
+    const content = completion.choices[0]?.message?.content;
+    if (!content) throw new Error("The model returned no group synthesis.");
+    const synthesis = JSON.parse(content) as Partial<GroupPayload>;
+
+    await db
+      .update(labGroupsTable)
+      .set({
+        project: synthesis.project || "",
+        students: synthesis.students ?? existing[0].students,
+        color: synthesis.color || existing[0].color,
+        status: synthesis.status || existing[0].status,
+        progress: Math.round(Math.max(0, Math.min(100, synthesis.progress ?? 0))),
+        currentFocus: synthesis.currentFocus || "",
+        blocker: synthesis.blocker ?? null,
+        phase: isPhase(synthesis.phase) ? synthesis.phase : null,
+        summary: synthesis.summary || null,
+        lastUpdated: parsed.data.weekOf.toISOString().slice(0, 10),
+      })
+      .where(eq(labGroupsTable.id, req.params.id));
+
+    const [updated] = await db
+      .select()
+      .from(labGroupsTable)
+      .where(eq(labGroupsTable.id, req.params.id));
+    res.json(toGroupPayload(updated));
+  } catch (error) {
+    req.log.error({ err: error }, "Individual Kanban photo synthesis failed");
+    res.status(500).json({ error: "We couldn't synthesize that group photo. Try a clearer board image." });
+  }
+});
+
 router.get("/groups/:id/history", async (req, res) => {
   await ensureSeedData();
   const group = await db
@@ -519,6 +598,24 @@ router.get("/groups/:id/history", async (req, res) => {
       done: hasCapturedWork ? Math.round(progress / 25) : 0,
     };
   });
+  const currentGroup = group[0];
+  const latestPoint = points.at(-1);
+  if (latestPoint && currentGroup.lastUpdated >= latestPoint.week) {
+    const hasCapturedWork = Boolean(
+      currentGroup.progress > 0 ||
+        currentGroup.currentFocus ||
+        currentGroup.summary ||
+        currentGroup.phase ||
+        currentGroup.blocker,
+    );
+    points[points.length - 1] = {
+      ...latestPoint,
+      progress: currentGroup.progress,
+      todo: hasCapturedWork ? Math.max(0, 8 - Math.round(currentGroup.progress / 15)) : 0,
+      doing: hasCapturedWork ? Math.max(1, Math.round(currentGroup.progress / 18)) : 0,
+      done: hasCapturedWork ? Math.round(currentGroup.progress / 25) : 0,
+    };
+  }
   res.json(points);
 });
 

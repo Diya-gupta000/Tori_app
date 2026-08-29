@@ -9,7 +9,7 @@ import {
 import {
   getGetDashboardQueryKey, getGetGroupsQueryKey, getGetGroupHistoryQueryKey,
   getGetSnapshotsQueryKey, useCreateGroup, useGetDashboard, useGetGroups,
-  useGetGroupHistory, useGetSnapshots, useSynthesizeSnapshot,
+  useGetGroupHistory, useGetSnapshots, useSynthesizeGroupSnapshot, useSynthesizeSnapshot,
 } from '@workspace/api-client-react';
 import type { Dashboard, GroupHistoryPoint, Snapshot, StudentGroup, StudentGroupStatus } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -154,9 +154,10 @@ function GroupRow({ group, compact = false }: { group: StudentGroup; compact?: b
   </Link>;
 }
 
-function SnapshotDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function SnapshotDialog({ open, onClose, groupId }: { open: boolean; onClose: () => void; groupId?: string }) {
   const queryClient = useQueryClient();
   const synthesize = useSynthesizeSnapshot();
+  const synthesizeGroup = useSynthesizeGroupSnapshot();
   const [file, setFile] = useState<File | null>(null);
   const [weekOf, setWeekOf] = useState(() => new Date().toISOString().slice(0, 10));
   const [preview, setPreview] = useState('');
@@ -171,18 +172,28 @@ function SnapshotDialog({ open, onClose }: { open: boolean; onClose: () => void 
   };
   const submit = () => {
     if (!file || !preview) return;
-    synthesize.mutate({ data: { weekOf, fileName: file.name, imageDataUrl: preview } }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+    const data = { weekOf, fileName: file.name, imageDataUrl: preview };
+    const onSuccess = () => {
+      queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetGroupsQueryKey() });
+      if (groupId) {
+        queryClient.invalidateQueries({ queryKey: getGetGroupHistoryQueryKey(groupId) });
+      } else {
         queryClient.invalidateQueries({ queryKey: getGetSnapshotsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetGroupsQueryKey() });
-        setFile(null); setPreview(''); onClose();
-      },
-    });
+      }
+      setFile(null); setPreview(''); onClose();
+    };
+    if (groupId) {
+      synthesizeGroup.mutate({ id: groupId, data }, { onSuccess });
+    } else {
+      synthesize.mutate({ data }, { onSuccess });
+    }
   };
+  const isPending = groupId ? synthesizeGroup.isPending : synthesize.isPending;
+  const isError = groupId ? synthesizeGroup.isError : synthesize.isError;
   return <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/35 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" data-testid="dialog-snapshot">
     <div className="w-full max-w-[540px] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
-      <div className="flex items-start justify-between border-b border-border px-6 py-5"><div><div className="eyebrow">Weekly synthesis</div><h2 className="serif mt-1 text-2xl">Bring the board into focus</h2></div><button type="button" aria-label="Close upload dialog" data-testid="button-close-snapshot" onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={18} /></button></div>
+      <div className="flex items-start justify-between border-b border-border px-6 py-5"><div><div className="eyebrow">{groupId ? 'Group synthesis' : 'Weekly synthesis'}</div><h2 className="serif mt-1 text-2xl">{groupId ? 'Bring this project into focus' : 'Bring the board into focus'}</h2></div><button type="button" aria-label="Close upload dialog" data-testid="button-close-snapshot" onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={18} /></button></div>
       <div className="p-6">
         <label className="text-xs font-semibold">Week of <span className="font-normal text-muted-foreground">(Monday)</span></label>
         <input type="date" value={weekOf} onChange={(e) => setWeekOf(e.target.value)} data-testid="input-week-of" className="focus-ring mt-2 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm" />
@@ -190,8 +201,8 @@ function SnapshotDialog({ open, onClose }: { open: boolean; onClose: () => void 
         <button type="button" onClick={() => inputRef.current?.click()} data-testid="button-select-photo" className={cn('focus-ring mt-4 flex min-h-[178px] w-full flex-col items-center justify-center rounded-xl border border-dashed px-5 text-center lab-transition', preview ? 'border-[hsl(var(--accent)/.7)] bg-[hsl(var(--accent)/.09)]' : 'border-border bg-background hover:border-[hsl(var(--accent)/.7)] hover:bg-muted')}>
           {preview ? <><img src={preview} alt="Selected board preview" className="max-h-28 max-w-full rounded-lg object-contain" /><span className="mt-3 text-xs font-semibold">{file?.name}</span><span className="mt-1 text-[10px] text-muted-foreground">Select another photo</span></> : <><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground"><FileImage size={20} /></div><span className="mt-3 text-sm font-semibold">Choose a board photo</span><span className="mt-1 text-xs text-muted-foreground">JPG or PNG · a clear overhead shot works best</span></>}
         </button>
-        {synthesize.isError && <p className="mt-3 flex items-center gap-2 text-xs text-destructive" data-testid="status-synthesis-error"><CircleAlert size={14} />Could not synthesize this photo. Please try again.</p>}
-        <div className="mt-6 flex items-center justify-end gap-2"><Button variant="quiet" onClick={onClose} data-testid="button-cancel-snapshot">Cancel</Button><Button onClick={submit} disabled={!file || synthesize.isPending} data-testid="button-submit-snapshot">{synthesize.isPending ? <><Sparkles size={15} className="animate-pulse" />Reading board...</> : <><Sparkles size={15} />Synthesize board</>}</Button></div>
+         {isError && <p className="mt-3 flex items-center gap-2 text-xs text-destructive" data-testid="status-synthesis-error"><CircleAlert size={14} />Could not synthesize this photo. Please try again.</p>}
+         <div className="mt-6 flex items-center justify-end gap-2"><Button variant="quiet" onClick={onClose} data-testid="button-cancel-snapshot">Cancel</Button><Button onClick={submit} disabled={!file || isPending} data-testid="button-submit-snapshot">{isPending ? <><Sparkles size={15} className="animate-pulse" />Reading board...</> : <><Sparkles size={15} />{groupId ? 'Synthesize group' : 'Synthesize board'}</>}</Button></div>
       </div>
     </div>
   </div>;
@@ -264,6 +275,7 @@ function GroupDetailPage() {
   const id = params.id || '';
   const groupsQuery = useGetGroups();
   const historyQuery = useGetGroupHistory(id, { query: { enabled: !!id, queryKey: getGetGroupHistoryQueryKey(id) } });
+  const [uploadOpen, setUploadOpen] = useState(false);
   const group = groupsQuery.data?.find((item) => item.id === id);
   if (groupsQuery.isLoading || historyQuery.isLoading) return <LoadingState label="Opening group history" />;
   if (groupsQuery.isError || historyQuery.isError || !group) return <ErrorState onRetry={() => { groupsQuery.refetch(); historyQuery.refetch(); }} message={!group ? 'This group is not in the current notebook.' : undefined} />;
@@ -279,7 +291,7 @@ function GroupDetailPage() {
           <p className="mt-2 text-sm text-muted-foreground">{group.project || 'Project details pending'}</p>
         </div>
       </div>
-      <StatusPill status={group.status} />
+      <div className="flex items-center gap-3"><Button variant="secondary" onClick={() => setUploadOpen(true)} data-testid="button-upload-group-photo"><CloudUpload size={15} />Upload group photo</Button><StatusPill status={group.status} /></div>
     </div>
     <div className="mt-8 grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
       <section className="lab-card rounded-xl p-5 md:p-6">
@@ -315,6 +327,7 @@ function GroupDetailPage() {
       <div className="mb-3 flex items-end justify-between"><div><div className="eyebrow">Extracted work items</div><h2 className="serif mt-1 text-2xl">What is moving</h2></div><span className="mono text-[10px] text-muted-foreground">LATEST BOARD</span></div>
       <div className="grid gap-3 sm:grid-cols-3"><WorkColumn label="To do" count={history.at(-1)?.todo || 0} tone="bg-muted" /><WorkColumn label="Doing" count={history.at(-1)?.doing || 0} tone="bg-[hsl(var(--secondary)/.24)]" /><WorkColumn label="Done" count={history.at(-1)?.done || 0} tone="bg-[hsl(var(--accent)/.28)]" /></div>
     </section>
+    <SnapshotDialog open={uploadOpen} groupId={id} onClose={() => setUploadOpen(false)} />
   </div>;
 }
 

@@ -122,6 +122,41 @@ export const GetGroupHistoryResponse = zod.array(GetGroupHistoryResponseItem)
 
 
 /**
+ * Reads a photo for one group and updates only that group's progress record.
+ * @summary Synthesize an individual group's Kanban photo
+ */
+export const SynthesizeGroupSnapshotParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+export const synthesizeGroupSnapshotBodyImageDataUrlMin = 20;
+
+
+
+export const SynthesizeGroupSnapshotBody = zod.object({
+  "weekOf": zod.coerce.date(),
+  "fileName": zod.string().min(1),
+  "imageDataUrl": zod.string().min(synthesizeGroupSnapshotBodyImageDataUrlMin)
+})
+
+export const SynthesizeGroupSnapshotResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "project": zod.string(),
+  "students": zod.array(zod.string()),
+  "color": zod.string(),
+  "status": zod.enum(['On track', 'Needs attention', 'Blocked', 'Complete']),
+  "progress": zod.number(),
+  "currentFocus": zod.string(),
+  "blocker": zod.string().nullable(),
+  "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
+  "summary": zod.string().nullable(),
+  "lastUpdated": zod.coerce.date()
+})
+
+
+/**
  * @summary List weekly board snapshots
  */
 export const GetSnapshotsResponseItem = zod.object({

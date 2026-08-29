@@ -23,6 +23,7 @@ import type {
   Dashboard,
   GroupHistoryPoint,
   GroupInput,
+  GroupSnapshotInput,
   HealthStatus,
   Snapshot,
   SnapshotInput,
@@ -436,6 +437,79 @@ export function useGetGroupHistory<TData = Awaited<ReturnType<typeof getGroupHis
 
 
 
+
+export const getSynthesizeGroupSnapshotUrl = (id: string,) => {
+
+
+
+
+  return `/api/groups/${id}/synthesize`
+}
+
+/**
+ * Reads a photo for one group and updates only that group's progress record.
+ * @summary Synthesize an individual group's Kanban photo
+ */
+export const synthesizeGroupSnapshot = async (id: string,
+    groupSnapshotInput: GroupSnapshotInput, options?: Parameters<typeof customFetch>[1]): Promise<StudentGroup> => {
+
+  return customFetch<StudentGroup>(getSynthesizeGroupSnapshotUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(groupSnapshotInput)
+  }
+);}
+
+
+
+
+
+export const getSynthesizeGroupSnapshotMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof synthesizeGroupSnapshot>>, TError,{id: string;data: BodyType<GroupSnapshotInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof synthesizeGroupSnapshot>>, TError,{id: string;data: BodyType<GroupSnapshotInput>}, TContext> => {
+
+const mutationKey = ['synthesizeGroupSnapshot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof synthesizeGroupSnapshot>>, {id: string;data: BodyType<GroupSnapshotInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  synthesizeGroupSnapshot(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SynthesizeGroupSnapshotMutationResult = NonNullable<Awaited<ReturnType<typeof synthesizeGroupSnapshot>>>
+    export type SynthesizeGroupSnapshotMutationBody = BodyType<GroupSnapshotInput>
+    export type SynthesizeGroupSnapshotMutationError = ErrorType<void>
+
+    /**
+ * @summary Synthesize an individual group's Kanban photo
+ */
+export const useSynthesizeGroupSnapshot = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof synthesizeGroupSnapshot>>, TError,{id: string;data: BodyType<GroupSnapshotInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof synthesizeGroupSnapshot>>,
+        TError,
+        {id: string;data: BodyType<GroupSnapshotInput>},
+        TContext
+      > => {
+      return useMutation(getSynthesizeGroupSnapshotMutationOptions(options));
+    }
 
 export const getGetSnapshotsUrl = () => {
 

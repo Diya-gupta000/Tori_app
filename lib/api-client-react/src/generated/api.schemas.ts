@@ -88,6 +88,14 @@ export interface SnapshotInput {
   imageDataUrl: string;
 }
 
+export interface GroupSnapshotInput {
+  weekOf: string;
+  /** @minLength 1 */
+  fileName: string;
+  /** @minLength 20 */
+  imageDataUrl: string;
+}
+
 export interface Dashboard {
   weekOf: string;
   totalGroups: number;

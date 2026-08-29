@@ -92,6 +92,35 @@ paths:
                   $ref: "#/components/schemas/GroupHistoryPoint"
         "404":
           description: Group not found
+  /groups/{id}/synthesize:
+    post:
+      operationId: synthesizeGroupSnapshot
+      tags: [progress]
+      summary: Synthesize an individual group's Kanban photo
+      description: Reads a photo for one group and updates only that group's progress record.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupSnapshotInput"
+      responses:
+        "200":
+          description: Updated student group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentGroup"
+        "404":
+          description: Group not found
+        "500":
+          description: Synthesis failed
   /snapshots:
     get:
       operationId: getSnapshots
@@ -230,6 +259,19 @@ components:
             type: string
       required: [id, weekOf, fileName, createdAt, groups, summary, wins, attentionItems]
     SnapshotInput:
+      type: object
+      properties:
+        weekOf:
+          type: string
+          format: date
+        fileName:
+          type: string
+          minLength: 1
+        imageDataUrl:
+          type: string
+          minLength: 20
+      required: [weekOf, fileName, imageDataUrl]
+    GroupSnapshotInput:
       type: object
       properties:
         weekOf:

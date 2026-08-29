@@ -9,6 +9,7 @@
 export * from './dashboard';
 export * from './groupHistoryPoint';
 export * from './groupInput';
+export * from './groupSnapshotInput';
 export * from './healthStatus';
 export * from './snapshot';
 export * from './snapshotInput';

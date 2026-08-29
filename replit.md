@@ -38,6 +38,7 @@ A weekly Kanban photo synthesis dashboard for research lab teachers to track stu
 
 - Overview dashboard with lab-level progress, four-week trend, group pulse, and teacher attention signals.
 - Weekly photo upload flow that sends a board image to OpenAI vision for structured progress synthesis.
+- Per-group photo upload flow from each group dossier that updates only that group’s progress record.
 - Searchable groups directory, group creation, per-group history, and weekly snapshot archive.
 
 ## User preferences
