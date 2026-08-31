@@ -41,7 +41,12 @@ export const GetDashboardResponse = zod.object({
   "blocker": zod.string().nullable(),
   "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
   "summary": zod.string().nullable(),
-  "lastUpdated": zod.coerce.date()
+  "lastUpdated": zod.coerce.date(),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})).optional(),
+  "matchMethod": zod.string().nullish()
 })),
   "trend": zod.array(zod.object({
   "week": zod.string(),
@@ -69,7 +74,12 @@ export const GetGroupsResponseItem = zod.object({
   "blocker": zod.string().nullable(),
   "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
   "summary": zod.string().nullable(),
-  "lastUpdated": zod.coerce.date()
+  "lastUpdated": zod.coerce.date(),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})).optional(),
+  "matchMethod": zod.string().nullish()
 })
 export const GetGroupsResponse = zod.array(GetGroupsResponseItem)
 
@@ -100,7 +110,12 @@ export const CreateGroupResponse = zod.object({
   "blocker": zod.string().nullable(),
   "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
   "summary": zod.string().nullable(),
-  "lastUpdated": zod.coerce.date()
+  "lastUpdated": zod.coerce.date(),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})).optional(),
+  "matchMethod": zod.string().nullish()
 })
 
 
@@ -122,7 +137,7 @@ export const GetGroupHistoryResponse = zod.array(GetGroupHistoryResponseItem)
 
 
 /**
- * Reads a photo for one group and updates only that group's progress record.
+ * Reads a photo for one existing group and saves a removable synthesis with import results.
  * @summary Synthesize an individual group's Kanban photo
  */
 export const SynthesizeGroupSnapshotParams = zod.object({
@@ -142,28 +157,21 @@ export const SynthesizeGroupSnapshotBody = zod.object({
 
 export const SynthesizeGroupSnapshotResponse = zod.object({
   "id": zod.string(),
-  "name": zod.string(),
-  "project": zod.string(),
-  "students": zod.array(zod.string()),
-  "color": zod.string(),
-  "status": zod.enum(['On track', 'Needs attention', 'Blocked', 'Complete']),
-  "progress": zod.number(),
-  "currentFocus": zod.string(),
-  "blocker": zod.string().nullable(),
-  "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
-  "summary": zod.string().nullable(),
-  "lastUpdated": zod.coerce.date()
-})
-
-
-/**
- * @summary List weekly board snapshots
- */
-export const GetSnapshotsResponseItem = zod.object({
-  "id": zod.string(),
   "weekOf": zod.coerce.date(),
   "fileName": zod.string(),
   "createdAt": zod.coerce.date(),
+  "source": zod.string(),
+  "removable": zod.boolean(),
+  "unmatchedGroups": zod.array(zod.object({
+  "label": zod.string(),
+  "students": zod.array(zod.string()),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})),
+  "reason": zod.string(),
+  "suggestedGroupId": zod.string().nullable()
+})),
   "groups": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
@@ -176,7 +184,57 @@ export const GetSnapshotsResponseItem = zod.object({
   "blocker": zod.string().nullable(),
   "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
   "summary": zod.string().nullable(),
-  "lastUpdated": zod.coerce.date()
+  "lastUpdated": zod.coerce.date(),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})).optional(),
+  "matchMethod": zod.string().nullish()
+})),
+  "summary": zod.string(),
+  "wins": zod.array(zod.string()),
+  "attentionItems": zod.array(zod.string())
+})
+
+
+/**
+ * @summary List weekly board snapshots
+ */
+export const GetSnapshotsResponseItem = zod.object({
+  "id": zod.string(),
+  "weekOf": zod.coerce.date(),
+  "fileName": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "source": zod.string(),
+  "removable": zod.boolean(),
+  "unmatchedGroups": zod.array(zod.object({
+  "label": zod.string(),
+  "students": zod.array(zod.string()),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})),
+  "reason": zod.string(),
+  "suggestedGroupId": zod.string().nullable()
+})),
+  "groups": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "project": zod.string(),
+  "students": zod.array(zod.string()),
+  "color": zod.string(),
+  "status": zod.enum(['On track', 'Needs attention', 'Blocked', 'Complete']),
+  "progress": zod.number(),
+  "currentFocus": zod.string(),
+  "blocker": zod.string().nullable(),
+  "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
+  "summary": zod.string().nullable(),
+  "lastUpdated": zod.coerce.date(),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})).optional(),
+  "matchMethod": zod.string().nullish()
 })),
   "summary": zod.string(),
   "wins": zod.array(zod.string()),
@@ -205,6 +263,18 @@ export const SynthesizeSnapshotResponse = zod.object({
   "weekOf": zod.coerce.date(),
   "fileName": zod.string(),
   "createdAt": zod.coerce.date(),
+  "source": zod.string(),
+  "removable": zod.boolean(),
+  "unmatchedGroups": zod.array(zod.object({
+  "label": zod.string(),
+  "students": zod.array(zod.string()),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})),
+  "reason": zod.string(),
+  "suggestedGroupId": zod.string().nullable()
+})),
   "groups": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
@@ -217,11 +287,33 @@ export const SynthesizeSnapshotResponse = zod.object({
   "blocker": zod.string().nullable(),
   "phase": zod.union([zod.literal('background research'),zod.literal('project design'),zod.literal('materials and approval'),zod.literal('Research set up'),zod.literal('data collection'),zod.literal('data analysis'),zod.literal(null)]).nullable(),
   "summary": zod.string().nullable(),
-  "lastUpdated": zod.coerce.date()
+  "lastUpdated": zod.coerce.date(),
+  "workItems": zod.array(zod.object({
+  "title": zod.string(),
+  "details": zod.string().nullable()
+})).optional(),
+  "matchMethod": zod.string().nullish()
 })),
   "summary": zod.string(),
   "wins": zod.array(zod.string()),
   "attentionItems": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Remove a synthesis and safely restore its group updates
+ */
+export const RemoveSynthesisParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RemoveSynthesisResponse = zod.object({
+  "removedSnapshotId": zod.string(),
+  "restoredGroupIds": zod.array(zod.string()),
+  "preservedEdits": zod.array(zod.object({
+  "groupId": zod.string(),
+  "fields": zod.array(zod.string())
+}))
 })
 
 

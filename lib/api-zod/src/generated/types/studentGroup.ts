@@ -7,6 +7,7 @@
  */
 import type { StudentGroupPhase } from './studentGroupPhase';
 import type { StudentGroupStatus } from './studentGroupStatus';
+import type { WorkItem } from './workItem';
 
 export interface StudentGroup {
   id: string;
@@ -24,4 +25,7 @@ export interface StudentGroup {
   /** @nullable */
   summary: string | null;
   lastUpdated: Date;
+  workItems?: WorkItem[];
+  /** @nullable */
+  matchMethod?: string | null;
 }

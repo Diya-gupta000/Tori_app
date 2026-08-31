@@ -6,12 +6,16 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { StudentGroup } from './studentGroup';
+import type { UnmatchedGroup } from './unmatchedGroup';
 
 export interface Snapshot {
   id: string;
   weekOf: Date;
   fileName: string;
   createdAt: Date;
+  source: string;
+  removable: boolean;
+  unmatchedGroups: UnmatchedGroup[];
   groups: StudentGroup[];
   summary: string;
   wins: string[];
