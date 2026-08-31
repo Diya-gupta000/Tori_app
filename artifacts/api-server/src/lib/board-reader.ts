@@ -33,9 +33,9 @@ export function validateBoard(value: unknown): BoardRead {
   return result;
 }
 
-export async function readBoard(imageDataUrl: string, weekOf: string, groupName?: string): Promise<BoardRead> {
+export async function readBoard(imageDataUrl: string, weekOf: string, groupName?: string, signal?: AbortSignal): Promise<BoardRead> {
   if (!process.env.OPENAI_API_KEY) throw new Error("Photo synthesis is not configured yet.");
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 0 });
   const response = await client.chat.completions.create({
     model: "gpt-5.4-mini",
     max_completion_tokens: 8192,
@@ -47,7 +47,7 @@ export async function readBoard(imageDataUrl: string, weekOf: string, groupName?
         { type: "image_url", image_url: { url: imageDataUrl } },
       ] },
     ],
-  });
+  }, { signal });
   const choice = response.choices[0];
   if (choice?.message.refusal) throw new Error("The image could not be analyzed.");
   if (choice?.finish_reason !== "stop" || !choice.message.content) throw new Error("The board analysis was incomplete. Try a clearer or smaller board section.");
