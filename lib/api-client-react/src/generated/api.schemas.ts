@@ -141,3 +141,9 @@ export interface Dashboard {
   attentionItems: string[];
 }
 
+export type GetTeamSession200 = {
+  userId: string;
+  orgId: string;
+  isAdmin: boolean;
+};
+

@@ -7,6 +7,7 @@
  */
 
 export * from './dashboard';
+export * from './getTeamSession200';
 export * from './groupHistoryPoint';
 export * from './groupInput';
 export * from './groupSnapshotInput';

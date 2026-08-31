@@ -4,7 +4,14 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { db, pool, groupStatesTable, labGroupsTable, snapshotsTable } from "@workspace/db";
 import { findExistingSynthesis, removeSynthesis, saveSynthesis } from "../src/lib/synthesis-store";
 import { board, extracted, roster } from "./fixtures";
-import app from "../src/app";
+import { createApp } from "../src/app";
+import { readConfig } from "../src/lib/config";
+import sharp from "sharp";
+
+const app = createApp({ config: { ...readConfig(), orgId: 'org_test' }, authenticate: (_req, res, next) => {
+  res.locals.identity = { userId: 'user_test', orgId: 'org_test', role: 'org:admin' }; next();
+} });
+const origin = 'http://localhost:5173';
 
 if (!process.env.DATABASE_URL?.includes("tori_synthesis_test_")) throw new Error("Integration tests require a dedicated tori_synthesis_test_ database, never the application database.");
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -197,11 +204,12 @@ test("HTTP API returns controlled configuration/validation errors and current gr
   const address = server.address() as { port: number };
   const base = `http://127.0.0.1:${address.port}/api`;
   try {
-    const response = await fetch(`${base}/snapshots/synthesize`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ weekOf: "2026-08-24", fileName: "test.jpg", imageDataUrl: "data:image/jpeg;base64,aGVsbG8=" }) });
+    const image = await sharp({ create: { width: 2, height: 2, channels: 3, background: 'white' } }).jpeg().toBuffer();
+    const response = await fetch(`${base}/snapshots/synthesize`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify({ weekOf: "2026-08-24", fileName: "test.jpg", imageDataUrl: `data:image/jpeg;base64,${image.toString('base64')}` }) });
     assert.equal(response.status, 503);
     assert.match((await response.json() as { error: string }).error, /OPENAI_API_KEY/);
-    const invalid = await fetch(`${base}/snapshots/synthesize`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const invalid = await fetch(`${base}/snapshots/synthesize`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin }, body: "{}" });
     assert.equal(invalid.status, 400);
     const metrics = await (await fetch(`${base}/dashboard`)).json() as { totalGroups: number; onTrack: number; needsAttention: number };
     assert.equal(metrics.totalGroups, 14); assert.equal(metrics.onTrack, 14); assert.equal(metrics.needsAttention, 0);
@@ -228,7 +236,7 @@ test("HTTP removal refreshes snapshots, groups, and dashboard without changing t
     const before = await (await fetch(`${base}/snapshots`)).json() as Array<{ id: string; removable: boolean }>;
     assert.equal(before.find((item) => item.id === snapshot.id)?.removable, true);
     await guarded(async () => {
-      const response = await fetch(`${base}/snapshots/${snapshot.id}`, { method: "DELETE" });
+      const response = await fetch(`${base}/snapshots/${snapshot.id}`, { method: "DELETE", headers: { Origin: origin } });
       assert.equal(response.status, 200);
       assert.equal((await response.json() as { removedSnapshotId: string }).removedSnapshotId, snapshot.id);
     });
