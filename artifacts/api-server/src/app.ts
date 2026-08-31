@@ -26,7 +26,8 @@ app.use(
   }),
 );
 app.use(cors());
-app.use(express.json({ limit: "20mb" }));
+// Allows a 16 MB image plus base64/JSON overhead; the synthesis route checks decoded size.
+app.use(express.json({ limit: "24mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);

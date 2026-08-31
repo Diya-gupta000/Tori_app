@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "test:integration": "tsx --test tests/*.integration.ts",
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "zod": "catalog:",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",
@@ -21,6 +24,7 @@
     "pino-http": "^10.5.0"
   },
   "devDependencies": {
+    "tsx": "catalog:",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

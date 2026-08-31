@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type ButtonHTMLAttributes } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
 import {
@@ -9,13 +9,16 @@ import {
 import {
   getGetDashboardQueryKey, getGetGroupsQueryKey, getGetGroupHistoryQueryKey,
   getGetSnapshotsQueryKey, useCreateGroup, useGetDashboard, useGetGroups,
-  useGetGroupHistory, useGetSnapshots, useSynthesizeGroupSnapshot, useSynthesizeSnapshot,
+  useGetGroupHistory, useGetSnapshots, useSynthesizeGroupSnapshot, useSynthesizeSnapshot, useRemoveSynthesis,
 } from '@workspace/api-client-react';
 import type { Dashboard, GroupHistoryPoint, Snapshot, StudentGroup, StudentGroupStatus } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import { SynthesisResult } from '@/components/synthesis-result';
+import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import './index.css';
 
 const queryClient = new QueryClient();
@@ -69,18 +72,7 @@ function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="mt-auto rounded-xl border border-sidebar-border bg-sidebar-accent/45 p-4">
-          <div className="flex items-center justify-between">
-            <span className="eyebrow !text-sidebar-foreground/45">This week</span>
-            <span className="h-2 w-2 rounded-full bg-sidebar-primary" />
-          </div>
-          <p className="mt-3 text-[13px] leading-5 text-sidebar-foreground/80">A clear next step beats a perfect board.</p>
-          <div className="mt-4 h-1 overflow-hidden rounded-full bg-sidebar-foreground/10">
-            <div className="h-full w-[72%] rounded-full bg-sidebar-primary" />
-          </div>
-          <p className="mono mt-2 text-[10px] text-sidebar-foreground/45">weekly rhythm · active</p>
-        </div>
-        <div className="mt-5 flex items-center gap-3 px-2">
+        <div className="mt-auto flex items-center gap-3 px-2 pt-6">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] text-xs font-bold text-foreground">VJ</div>
           <div className="min-w-0"><div className="truncate text-xs font-semibold">Victoria Johnson</div><div className="text-[10px] text-sidebar-foreground/45">Lab teacher</div></div>
           <button type="button" aria-label="Open profile menu" data-testid="button-profile-menu" className="ml-auto text-sidebar-foreground/45 hover:text-sidebar-foreground"><MoreHorizontal size={16} /></button>
@@ -159,12 +151,24 @@ function SnapshotDialog({ open, onClose, groupId }: { open: boolean; onClose: ()
   const synthesize = useSynthesizeSnapshot();
   const synthesizeGroup = useSynthesizeGroupSnapshot();
   const [file, setFile] = useState<File | null>(null);
-  const [weekOf, setWeekOf] = useState(() => new Date().toISOString().slice(0, 10));
+  const [weekOf, setWeekOf] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - (date.getDay() + 6) % 7);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
   const [preview, setPreview] = useState('');
+  const [result, setResult] = useState<Snapshot | null>(null);
+  const [fileError, setFileError] = useState('');
+  useEffect(() => { if (!open) { setResult(null); } }, [open]);
   const inputRef = useRef<HTMLInputElement>(null);
   if (!open) return null;
   const chooseFile = (selected: File | undefined) => {
     if (!selected) return;
+    setFileError('');
+    synthesize.reset(); synthesizeGroup.reset();
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type) || selected.size > 16 * 1024 * 1024) {
+      setFileError('Choose a JPEG, PNG, or WebP photo up to 16 MB.'); return;
+    }
     setFile(selected);
     const reader = new FileReader();
     reader.onload = () => setPreview(String(reader.result || ''));
@@ -173,15 +177,13 @@ function SnapshotDialog({ open, onClose, groupId }: { open: boolean; onClose: ()
   const submit = () => {
     if (!file || !preview) return;
     const data = { weekOf, fileName: file.name, imageDataUrl: preview };
-    const onSuccess = () => {
+    const onSuccess = (snapshot: Snapshot) => {
       queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetGroupsQueryKey() });
-      if (groupId) {
-        queryClient.invalidateQueries({ queryKey: getGetGroupHistoryQueryKey(groupId) });
-      } else {
-        queryClient.invalidateQueries({ queryKey: getGetSnapshotsQueryKey() });
-      }
-      setFile(null); setPreview(''); onClose();
+      queryClient.invalidateQueries({ queryKey: getGetSnapshotsQueryKey() });
+      snapshot.groups.forEach((group) => queryClient.invalidateQueries({ queryKey: getGetGroupHistoryQueryKey(group.id) }));
+      setFileError(''); setResult(snapshot);
+      setFile(null); setPreview('');
     };
     if (groupId) {
       synthesizeGroup.mutate({ id: groupId, data }, { onSuccess });
@@ -191,18 +193,22 @@ function SnapshotDialog({ open, onClose, groupId }: { open: boolean; onClose: ()
   };
   const isPending = groupId ? synthesizeGroup.isPending : synthesize.isPending;
   const isError = groupId ? synthesizeGroup.isError : synthesize.isError;
+  const mutationError = groupId ? synthesizeGroup.error : synthesize.error;
   return <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/35 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" data-testid="dialog-snapshot">
-    <div className="w-full max-w-[540px] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
-      <div className="flex items-start justify-between border-b border-border px-6 py-5"><div><div className="eyebrow">{groupId ? 'Group synthesis' : 'Weekly synthesis'}</div><h2 className="serif mt-1 text-2xl">{groupId ? 'Bring this project into focus' : 'Bring the board into focus'}</h2></div><button type="button" aria-label="Close upload dialog" data-testid="button-close-snapshot" onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={18} /></button></div>
+    <div className="max-h-[90vh] w-full max-w-[540px] overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl">
+      <div className="flex items-start justify-between border-b border-border px-6 py-5"><div><div className="eyebrow">{groupId ? 'Group synthesis' : 'Weekly synthesis'}</div><h2 className="serif mt-1 text-2xl">{groupId ? 'Bring this project into focus' : 'Bring the board into focus'}</h2></div><button type="button" aria-label="Close upload dialog" data-testid="button-close-snapshot" disabled={isPending} onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={18} /></button></div>
       <div className="p-6">
+        {result ? <><SynthesisResult snapshot={result} /><div className="mt-5 flex justify-end"><Button onClick={onClose} data-testid="button-synthesis-done">Done</Button></div></> : <>
         <label className="text-xs font-semibold">Week of <span className="font-normal text-muted-foreground">(Monday)</span></label>
-        <input type="date" value={weekOf} onChange={(e) => setWeekOf(e.target.value)} data-testid="input-week-of" className="focus-ring mt-2 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm" />
-        <input ref={inputRef} type="file" accept="image/*" className="hidden" data-testid="input-board-photo" onChange={(e) => chooseFile(e.target.files?.[0])} />
-        <button type="button" onClick={() => inputRef.current?.click()} data-testid="button-select-photo" className={cn('focus-ring mt-4 flex min-h-[178px] w-full flex-col items-center justify-center rounded-xl border border-dashed px-5 text-center lab-transition', preview ? 'border-[hsl(var(--accent)/.7)] bg-[hsl(var(--accent)/.09)]' : 'border-border bg-background hover:border-[hsl(var(--accent)/.7)] hover:bg-muted')}>
-          {preview ? <><img src={preview} alt="Selected board preview" className="max-h-28 max-w-full rounded-lg object-contain" /><span className="mt-3 text-xs font-semibold">{file?.name}</span><span className="mt-1 text-[10px] text-muted-foreground">Select another photo</span></> : <><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground"><FileImage size={20} /></div><span className="mt-3 text-sm font-semibold">Choose a board photo</span><span className="mt-1 text-xs text-muted-foreground">JPG or PNG · a clear overhead shot works best</span></>}
+        <input type="date" disabled={isPending} value={weekOf} onChange={(e) => setWeekOf(e.target.value)} data-testid="input-week-of" className="focus-ring mt-2 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm" />
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" disabled={isPending} className="hidden" data-testid="input-board-photo" onChange={(e) => chooseFile(e.target.files?.[0])} />
+        <button type="button" onClick={() => inputRef.current?.click()} data-testid="button-select-photo" disabled={isPending} className={cn('focus-ring mt-4 flex min-h-[178px] w-full flex-col items-center justify-center rounded-xl border border-dashed px-5 text-center lab-transition', preview ? 'border-[hsl(var(--accent)/.7)] bg-[hsl(var(--accent)/.09)]' : 'border-border bg-background hover:border-[hsl(var(--accent)/.7)] hover:bg-muted')}>
+          {preview ? <><img src={preview} alt="Selected board preview" className="max-h-28 max-w-full rounded-lg object-contain" /><span className="mt-3 text-xs font-semibold">{file?.name}</span><span className="mt-1 text-[10px] text-muted-foreground">Select another photo</span></> : <><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground"><FileImage size={20} /></div><span className="mt-3 text-sm font-semibold">Choose a board photo</span><span className="mt-1 text-xs text-muted-foreground">JPG, PNG or WebP · up to 16 MB</span></>}
         </button>
-         {isError && <p className="mt-3 flex items-center gap-2 text-xs text-destructive" data-testid="status-synthesis-error"><CircleAlert size={14} />Could not synthesize this photo. Please try again.</p>}
-         <div className="mt-6 flex items-center justify-end gap-2"><Button variant="quiet" onClick={onClose} data-testid="button-cancel-snapshot">Cancel</Button><Button onClick={submit} disabled={!file || isPending} data-testid="button-submit-snapshot">{isPending ? <><Sparkles size={15} className="animate-pulse" />Reading board...</> : <><Sparkles size={15} />{groupId ? 'Synthesize group' : 'Synthesize board'}</>}</Button></div>
+         {fileError && <p role="alert" className="mt-3 text-xs text-destructive">{fileError}</p>}
+         {isError && <p className="mt-3 flex items-center gap-2 text-xs text-destructive" data-testid="status-synthesis-error"><CircleAlert size={14} />{mutationError instanceof Error ? mutationError.message : 'Could not synthesize this photo. Please try again.'}</p>}
+         <div className="mt-6 flex items-center justify-end gap-2"><Button variant="quiet" disabled={isPending} onClick={onClose} data-testid="button-cancel-snapshot">Cancel</Button><Button onClick={submit} disabled={!file || !preview || isPending} data-testid="button-submit-snapshot">{isPending ? <><Sparkles size={15} className="animate-pulse" />Reading board...</> : <><Sparkles size={15} />{groupId ? 'Synthesize group' : 'Synthesize board'}</>}</Button></div>
+        </>}
       </div>
     </div>
   </div>;
@@ -350,7 +356,31 @@ function SnapshotsPage() {
 }
 
 function SnapshotCard({ snapshot, featured }: { snapshot: Snapshot; featured: boolean }) {
-  return <article className={cn('lab-card rounded-xl p-5 md:p-6', featured && 'border-[hsl(var(--accent)/.6)]')} data-testid={`card-snapshot-${snapshot.id}`}><div className="flex flex-col gap-5 md:flex-row md:items-start"><div className="flex-1"><div className="flex flex-wrap items-center gap-3"><span className="eyebrow">{featured ? 'Latest synthesis' : 'Archived synthesis'}</span><span className="mono rounded bg-muted px-2 py-1 text-[10px]">{formatDate(snapshot.weekOf)}</span></div><h2 className="serif mt-3 text-[25px]">{snapshot.summary || 'Weekly synthesis'}</h2><div className="mt-4 flex items-center gap-4 text-[11px] text-muted-foreground"><span className="flex items-center gap-1.5"><FileImage size={13} />{snapshot.fileName}</span><span className="text-border">·</span><span>{snapshot.groups?.length || 0} groups read</span></div></div><div className="grid grid-cols-2 gap-2 md:w-[260px]"><div className="rounded-lg bg-[hsl(var(--accent)/.2)] p-3"><div className="eyebrow !text-foreground/55">Wins</div><div className="mono mt-2 text-xl">{snapshot.wins?.length || 0}</div></div><div className="rounded-lg bg-[hsl(var(--secondary)/.22)] p-3"><div className="eyebrow !text-foreground/55">Signals</div><div className="mono mt-2 text-xl">{snapshot.attentionItems?.length || 0}</div></div></div></div>{((snapshot.wins?.length || 0) > 0 || (snapshot.attentionItems?.length || 0) > 0) && <div className="mt-6 grid gap-5 border-t border-border pt-5 md:grid-cols-2"><ListBlock title="What moved" items={snapshot.wins || []} tone="mint" /><ListBlock title="Keep close" items={snapshot.attentionItems || []} tone="sand" /></div>}</article>;
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const removal = useRemoveSynthesis();
+  const client = useQueryClient();
+  const { toast } = useToast();
+  const remove = () => removal.mutate({ id: snapshot.id }, { onSuccess: (result) => {
+    client.invalidateQueries({ queryKey: getGetSnapshotsQueryKey() });
+    client.invalidateQueries({ queryKey: getGetGroupsQueryKey() });
+    client.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+    result.restoredGroupIds.forEach((id) => client.invalidateQueries({ queryKey: getGetGroupHistoryQueryKey(id) }));
+    setConfirmOpen(false);
+    toast({ title: 'Synthesis removed', description: result.preservedEdits.length ? 'Later manual edits were preserved.' : 'Group state has been restored.' });
+  } });
+  return <article className={cn('lab-card rounded-xl p-5 md:p-6', featured && 'border-[hsl(var(--accent)/.6)]')} data-testid={`card-snapshot-${snapshot.id}`}><div className="flex flex-col gap-5 md:flex-row md:items-start"><div className="flex-1"><div className="flex flex-wrap items-center gap-3"><span className="eyebrow">{featured ? 'Latest synthesis' : 'Archived synthesis'}</span><span className="mono rounded bg-muted px-2 py-1 text-[10px]">{formatDate(snapshot.weekOf)}</span></div><h2 className="serif mt-3 text-[25px]">{snapshot.summary || 'Weekly synthesis'}</h2><div className="mt-4 flex items-center gap-4 text-[11px] text-muted-foreground"><span className="flex items-center gap-1.5"><FileImage size={13} />{snapshot.fileName}</span><span className="text-border">·</span><span>{snapshot.groups?.length || 0} groups read</span></div></div><div className="grid grid-cols-2 gap-2 md:w-[260px]"><div className="rounded-lg bg-[hsl(var(--accent)/.2)] p-3"><div className="eyebrow !text-foreground/55">Wins</div><div className="mono mt-2 text-xl">{snapshot.wins?.length || 0}</div></div><div className="rounded-lg bg-[hsl(var(--secondary)/.22)] p-3"><div className="eyebrow !text-foreground/55">Signals</div><div className="mono mt-2 text-xl">{snapshot.attentionItems?.length || 0}</div></div></div></div>{((snapshot.wins?.length || 0) > 0 || (snapshot.attentionItems?.length || 0) > 0) && <div className="mt-6 grid gap-5 border-t border-border pt-5 md:grid-cols-2"><ListBlock title="What moved" items={snapshot.wins || []} tone="mint" /><ListBlock title="Keep close" items={snapshot.attentionItems || []} tone="sand" /></div>}
+    {snapshot.removable && <div className="mt-5 border-t border-border pt-4">
+      <details><summary className="cursor-pointer text-xs font-semibold">View matched groups and review unmatched results</summary><div className="mt-3"><SynthesisResult snapshot={snapshot} /></div></details>
+      <Button variant="quiet" className="mt-3 text-destructive" onClick={() => { removal.reset(); setConfirmOpen(true); }} data-testid={`remove-synthesis-${snapshot.id}`}>Remove synthesis</Button>
+      <AlertDialog open={confirmOpen} onOpenChange={(open) => { if (!removal.isPending) setConfirmOpen(open); }}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove the {formatDate(snapshot.weekOf)} synthesis?</AlertDialogTitle>
+          <AlertDialogDescription>The weekly synthesis and group updates created from this board will be removed. Groups themselves will not be deleted. Later manual edits will be preserved.</AlertDialogDescription></AlertDialogHeader>
+          {removal.isError && <p role="alert" className="text-sm text-destructive">{removal.error instanceof Error ? removal.error.message : 'Removal failed. No partial changes were kept.'}</p>}
+          <AlertDialogFooter><AlertDialogCancel disabled={removal.isPending}>Cancel</AlertDialogCancel><Button onClick={remove} disabled={removal.isPending} data-testid="confirm-remove-synthesis">{removal.isPending ? 'Removing…' : 'Remove synthesis'}</Button></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>}
+  </article>;
 }
 
 function ListBlock({ title, items, tone }: { title: string; items: string[]; tone: string }) {

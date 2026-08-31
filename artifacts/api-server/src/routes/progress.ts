@@ -1,9 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, count, desc, eq } from "drizzle-orm";
-import OpenAI from "openai";
+import { asc, count, desc, eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { phases, readBoard } from "../lib/board-reader";
+import { safeSynthesisError } from "../lib/synthesis-log";
+import { normalizeWeek } from "../lib/synthesis";
+import { findExistingSynthesis, removeSynthesis, saveSynthesis, SynthesisError } from "../lib/synthesis-store";
 import {
   CreateGroupBody,
-  SynthesizeGroupSnapshotBody,
   SynthesizeSnapshotBody,
 } from "@workspace/api-zod";
 import { db, labGroupsTable, snapshotsTable } from "@workspace/db";
@@ -25,26 +28,7 @@ type GroupPayload = {
   lastUpdated: string;
 };
 
-type Phase =
-  | "background research"
-  | "project design"
-  | "materials and approval"
-  | "Research set up"
-  | "data collection"
-  | "data analysis";
-
-const phaseValues: Phase[] = [
-  "background research",
-  "project design",
-  "materials and approval",
-  "Research set up",
-  "data collection",
-  "data analysis",
-];
-
-function isPhase(value: unknown): value is Phase {
-  return typeof value === "string" && phaseValues.includes(value as Phase);
-}
+type Phase = typeof phases[number];
 
 type SnapshotPayload = {
   id: string;
@@ -285,15 +269,10 @@ let seedDataPromise: Promise<void> | null = null;
 
 async function seedDataOnce() {
   const existingGroups = await db.select({ id: labGroupsTable.id }).from(labGroupsTable);
-  const desiredIds = new Set(seedGroups.map((group) => group.id));
-  const hasDesiredRoster =
-    existingGroups.length === seedGroups.length &&
-    existingGroups.every((group) => desiredIds.has(group.id));
-
-  if (!hasDesiredRoster) {
-    await db.delete(snapshotsTable);
-    await db.delete(labGroupsTable);
-  }
+  // Initialization must never reset a real roster (including manually added groups).
+  if (existingGroups.length > 0) return;
+  const existingSnapshots = await db.select({ id: snapshotsTable.id }).from(snapshotsTable).limit(1);
+  if (existingSnapshots.length) throw new Error("Existing snapshot data requires explicit roster recovery; automatic reseeding was refused.");
 
   await db.insert(labGroupsTable).values(
     seedGroups.map((group) => ({
@@ -363,12 +342,15 @@ function toGroupPayload(group: typeof labGroupsTable.$inferSelect): GroupPayload
 
 function toSnapshotPayload(
   snapshot: typeof snapshotsTable.$inferSelect,
-): SnapshotPayload {
+) {
   return {
     id: snapshot.id,
     weekOf: snapshot.weekOf,
     fileName: snapshot.fileName,
     createdAt: snapshot.createdAt.toISOString(),
+    source: snapshot.source,
+    removable: snapshot.source !== "seed",
+    unmatchedGroups: snapshot.unmatchedGroups,
     groups: (snapshot.groups as Partial<GroupPayload>[]).map((group) => ({
       id: group.id || "unknown-group",
       name: group.name || "Unnamed group",
@@ -382,6 +364,8 @@ function toSnapshotPayload(
       phase: group.phase ?? null,
       summary: group.summary ?? null,
       lastUpdated: group.lastUpdated || snapshot.weekOf,
+      workItems: (group as GroupPayload & { workItems?: unknown[] }).workItems ?? [],
+      matchMethod: (group as GroupPayload & { matchMethod?: string }).matchMethod ?? null,
     })),
     summary: snapshot.summary,
     wins: snapshot.wins,
@@ -395,7 +379,7 @@ router.get("/dashboard", async (req: Request, res: Response) => {
   const snapshots = await db
     .select()
     .from(snapshotsTable)
-    .orderBy(desc(snapshotsTable.weekOf));
+    .orderBy(desc(snapshotsTable.weekOf), desc(snapshotsTable.createdAt));
   const latest = snapshots[0];
   const averageProgress = Math.round(
     groups.reduce((sum, group) => sum + group.progress, 0) / groups.length,
@@ -414,7 +398,7 @@ router.get("/dashboard", async (req: Request, res: Response) => {
     totalGroups: groups.length,
     onTrack: groups.filter((group) => group.status === "On track").length,
     needsAttention: groups.filter(
-      (group) => group.status !== "On track" && group.status !== "Complete",
+      (group) => group.status === "Needs attention",
     ).length,
     averageProgress,
     progressDelta: averageProgress - previousAverage,
@@ -423,6 +407,8 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       "Upload your first board photo to turn this week’s work into a shared progress picture.",
     groups,
     trend: snapshots
+      // Unmatched-only imports are review records, not percentage observations.
+      .filter((snapshot) => (snapshot.groups as unknown[]).length > 0)
       .slice(0, 5)
       .reverse()
       .map((snapshot) => {
@@ -486,81 +472,7 @@ router.post("/groups", async (req, res) => {
 });
 
 router.post("/groups/:id/synthesize", async (req, res) => {
-  const parsed = SynthesizeGroupSnapshotBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "A group photo, file name, and week are required." });
-    return;
-  }
-
-  const existing = await db
-    .select()
-    .from(labGroupsTable)
-    .where(eq(labGroupsTable.id, req.params.id));
-  if (!existing[0]) {
-    res.status(404).json({ error: "Group not found." });
-    return;
-  }
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(503).json({ error: "Photo synthesis is not configured yet." });
-    return;
-  }
-
-  try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5.4-mini",
-      max_completion_tokens: 4096,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a research lab mentor assistant. Read this single group's Kanban board photo carefully. Return only valid JSON with project (string), students (array of strings), status (On track, Needs attention, Blocked, or Complete), progress (number 0-100), currentFocus (string), blocker (string or null), phase (one of background research, project design, materials and approval, Research set up, data collection, or data analysis; use null when unclear), and summary (a concise sentence or two covering all visible Kanban work; use null if the board is unreadable). Keep the response grounded in visible cards and do not invent details.",
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Synthesize the Kanban board photo for the group "${existing[0].name}" for the week of ${parsed.data.weekOf.toISOString().slice(0, 10)}. The uploaded file is ${parsed.data.fileName}.`,
-            },
-            {
-              type: "image_url",
-              image_url: { url: parsed.data.imageDataUrl },
-            },
-          ],
-        },
-      ],
-    });
-    const content = completion.choices[0]?.message?.content;
-    if (!content) throw new Error("The model returned no group synthesis.");
-    const synthesis = JSON.parse(content) as Partial<GroupPayload>;
-
-    await db
-      .update(labGroupsTable)
-      .set({
-        project: synthesis.project || "",
-        students: synthesis.students ?? existing[0].students,
-        color: synthesis.color || existing[0].color,
-        status: synthesis.status || existing[0].status,
-        progress: Math.round(Math.max(0, Math.min(100, synthesis.progress ?? 0))),
-        currentFocus: synthesis.currentFocus || "",
-        blocker: synthesis.blocker ?? null,
-        phase: isPhase(synthesis.phase) ? synthesis.phase : null,
-        summary: synthesis.summary || null,
-        lastUpdated: parsed.data.weekOf.toISOString().slice(0, 10),
-      })
-      .where(eq(labGroupsTable.id, req.params.id));
-
-    const [updated] = await db
-      .select()
-      .from(labGroupsTable)
-      .where(eq(labGroupsTable.id, req.params.id));
-    res.json(toGroupPayload(updated));
-  } catch (error) {
-    req.log.error({ err: error }, "Individual Kanban photo synthesis failed");
-    res.status(500).json({ error: "We couldn't synthesize that group photo. Try a clearer board image." });
-  }
+  await handleSynthesis(req, res, String(req.params.id));
 });
 
 router.get("/groups/:id/history", async (req, res) => {
@@ -624,120 +536,77 @@ router.get("/snapshots", async (_req, res) => {
   const snapshots = await db
     .select()
     .from(snapshotsTable)
-    .orderBy(desc(snapshotsTable.weekOf));
+    .orderBy(desc(snapshotsTable.weekOf), desc(snapshotsTable.createdAt));
   res.json(snapshots.map(toSnapshotPayload));
 });
 
-router.post("/snapshots/synthesize", async (req, res) => {
+async function handleSynthesis(req: Request, res: Response, targetGroupId?: string) {
   const parsed = SynthesizeSnapshotBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "A board photo, file name, and week are required." });
     return;
   }
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(503).json({ error: "Photo synthesis is not configured yet." });
-    return;
-  }
-
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5.4-mini",
-      max_completion_tokens: 8192,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a research lab mentor assistant. Read the Kanban board photo carefully. Return only valid JSON with keys summary (string), wins (array of strings), attentionItems (array of strings), and groups (array). Each group must have id (short kebab-case), name, project, students (array), color (teal, violet, amber, or rose), status (On track, Needs attention, Blocked, or Complete), progress (number 0-100), currentFocus, blocker (string or null), phase (one of background research, project design, materials and approval, Research set up, data collection, or data analysis; use null when unclear), summary (a concise sentence or two covering the visible Kanban work), and lastUpdated. Infer group names from the board; if unclear, use Group 1, Group 2. Keep summaries specific and grounded in visible cards. Mention uncertainty in attentionItems rather than inventing facts.",
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Synthesize this weekly board photo for the week of ${parsed.data.weekOf}. The uploaded file is ${parsed.data.fileName}.`,
-            },
-            {
-              type: "image_url",
-              image_url: { url: parsed.data.imageDataUrl },
-            },
-          ],
-        },
-      ],
-    });
-    const content = completion.choices[0]?.message?.content;
-    if (!content) throw new Error("The model returned no synthesis.");
-    const synthesis = JSON.parse(content) as Omit<SnapshotPayload, "id" | "createdAt" | "weekOf" | "fileName">;
-    if (
-      typeof synthesis.summary !== "string" ||
-      !Array.isArray(synthesis.groups) ||
-      synthesis.groups.length === 0
-    ) {
-      throw new Error("The synthesis response was incomplete.");
+    const { fileName, imageDataUrl } = parsed.data;
+    const weekOf = normalizeWeek(parsed.data.weekOf.toISOString().slice(0, 10));
+    const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(imageDataUrl);
+    if (!match) throw new SynthesisError(400, "Use a JPEG, PNG, or WebP photo.");
+    const image = Buffer.from(match[2], "base64");
+    if (!image.length || image.length > 16 * 1024 * 1024) throw new SynthesisError(400, "The photo must be between 1 byte and 16 MB.");
+    const imageHash = createHash("sha256").update(image).digest("hex");
+    const existing = await findExistingSynthesis(weekOf, imageHash, targetGroupId);
+    if (existing) {
+      res.json(toSnapshotPayload(existing));
+      return;
     }
-
-    const snapshot: SnapshotPayload = {
-      id: `snapshot-${Date.now()}`,
-      weekOf: parsed.data.weekOf.toISOString().slice(0, 10),
-      fileName: parsed.data.fileName,
-      createdAt: new Date().toISOString(),
-      summary: synthesis.summary,
-      wins: synthesis.wins ?? [],
-      attentionItems: synthesis.attentionItems ?? [],
-      groups: synthesis.groups.map((group, index) => ({
-        id: group.id || `group-${index + 1}`,
-        name: group.name || `Group ${index + 1}`,
-        project: group.project || "",
-        students: group.students ?? [],
-        color: group.color ?? "teal",
-        status: group.status ?? "Needs attention",
-        progress: Math.round(Math.max(0, Math.min(100, group.progress ?? 0))),
-        currentFocus: group.currentFocus || "",
-        blocker: group.blocker ?? null,
-        phase: isPhase(group.phase) ? group.phase : null,
-        summary: group.summary || null,
-        lastUpdated: parsed.data.weekOf.toISOString().slice(0, 10),
-      })),
-    };
-
-    await db.transaction(async (tx) => {
-      await tx.insert(snapshotsTable).values({
-        id: snapshot.id,
-        weekOf: snapshot.weekOf,
-        fileName: snapshot.fileName,
-        createdAt: new Date(snapshot.createdAt),
-        groups: snapshot.groups,
-        summary: snapshot.summary,
-        wins: snapshot.wins,
-        attentionItems: snapshot.attentionItems,
-      });
-      for (const group of snapshot.groups) {
-        await tx
-          .insert(labGroupsTable)
-          .values(group)
-          .onConflictDoUpdate({
-            target: labGroupsTable.id,
-            set: {
-              name: group.name,
-              project: group.project,
-              students: group.students,
-              color: group.color,
-              status: group.status,
-              progress: group.progress,
-              currentFocus: group.currentFocus,
-              blocker: group.blocker,
-              phase: group.phase,
-              summary: group.summary,
-              lastUpdated: group.lastUpdated,
-            },
-          });
-      }
-    });
-    res.status(201).json(snapshot);
+    let groupName: string | undefined;
+    if (targetGroupId) {
+      const [group] = await db.select().from(labGroupsTable).where(eq(labGroupsTable.id, targetGroupId));
+      if (!group) throw new SynthesisError(404, "Group not found.");
+      groupName = group.name;
+    }
+    if (!process.env.OPENAI_API_KEY) throw new SynthesisError(503, "Photo synthesis is not configured yet. Set OPENAI_API_KEY on the backend.");
+    const board = await readBoard(imageDataUrl, weekOf, groupName);
+    const snapshot = await saveSynthesis({ weekOf, fileName, imageHash, board, targetGroupId });
+    if (process.env.NODE_ENV !== "production") {
+      req.log.info({ synthesisId: snapshot.id, extracted: board.groups.length,
+        groupsUpdated: (snapshot.groups as unknown[]).length, groupsCreated: 0,
+        unmatched: snapshot.unmatchedGroups.map((group) => group.label),
+        matches: (snapshot.groups as Array<Record<string, unknown>>).map((group) => ({
+          id: group.id, method: group.matchMethod, confidence: group.matchConfidence,
+          status: group.status, statusReason: group.statusReason, stage: group.phase,
+        })),
+      }, "Board synthesis saved");
+    }
+    res.status(201).json(toSnapshotPayload(snapshot));
   } catch (error) {
-    req.log.error({ err: error }, "Kanban photo synthesis failed");
-    res.status(500).json({ error: "We couldn't synthesize that photo. Try a clearer board image." });
+    if (error instanceof SynthesisError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    // Do not serialize SDK errors: they may contain request headers or image data.
+    req.log.error(safeSynthesisError(error), "Board synthesis failed");
+    res.status(500).json({ error: "The board could not be saved. No partial changes were kept. Please retry or use a clearer photo." });
+  }
+}
+
+router.post("/snapshots/synthesize", async (req, res) => {
+  await handleSynthesis(req, res);
+});
+
+router.delete("/snapshots/:id", async (req, res) => {
+  try {
+    const result = await removeSynthesis(String(req.params.id));
+    req.log.info({ synthesisId: result.removedSnapshotId, groupsRestored: result.restoredGroupIds.length,
+      preservedEdits: result.preservedEdits }, "Synthesis removed");
+    res.json(result);
+  } catch (error) {
+    if (error instanceof SynthesisError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    req.log.error(safeSynthesisError(error), "Synthesis removal failed");
+    res.status(500).json({ error: "Could not remove the synthesis. No partial changes were kept." });
   }
 });
 

@@ -25,6 +25,7 @@ import type {
   GroupInput,
   GroupSnapshotInput,
   HealthStatus,
+  RemovalResult,
   Snapshot,
   SnapshotInput,
   StudentGroup
@@ -447,13 +448,13 @@ export const getSynthesizeGroupSnapshotUrl = (id: string,) => {
 }
 
 /**
- * Reads a photo for one group and updates only that group's progress record.
+ * Reads a photo for one existing group and saves a removable synthesis with import results.
  * @summary Synthesize an individual group's Kanban photo
  */
 export const synthesizeGroupSnapshot = async (id: string,
-    groupSnapshotInput: GroupSnapshotInput, options?: Parameters<typeof customFetch>[1]): Promise<StudentGroup> => {
+    groupSnapshotInput: GroupSnapshotInput, options?: Parameters<typeof customFetch>[1]): Promise<Snapshot> => {
 
-  return customFetch<StudentGroup>(getSynthesizeGroupSnapshotUrl(id),
+  return customFetch<Snapshot>(getSynthesizeGroupSnapshotUrl(id),
   {
     ...options,
     method: 'POST',
@@ -658,5 +659,76 @@ export const useSynthesizeSnapshot = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getSynthesizeSnapshotMutationOptions(options));
+    }
+
+export const getRemoveSynthesisUrl = (id: string,) => {
+
+
+
+
+  return `/api/snapshots/${id}`
+}
+
+/**
+ * @summary Remove a synthesis and safely restore its group updates
+ */
+export const removeSynthesis = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<RemovalResult> => {
+
+  return customFetch<RemovalResult>(getRemoveSynthesisUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRemoveSynthesisMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeSynthesis>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeSynthesis>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['removeSynthesis'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeSynthesis>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  removeSynthesis(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveSynthesisMutationResult = NonNullable<Awaited<ReturnType<typeof removeSynthesis>>>
+
+    export type RemoveSynthesisMutationError = ErrorType<void>
+
+    /**
+ * @summary Remove a synthesis and safely restore its group updates
+ */
+export const useRemoveSynthesis = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeSynthesis>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeSynthesis>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRemoveSynthesisMutationOptions(options));
     }
 

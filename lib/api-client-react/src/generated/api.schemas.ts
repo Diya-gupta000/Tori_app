@@ -5,6 +5,32 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface WorkItem {
+  title: string;
+  /** @nullable */
+  details: string | null;
+}
+
+export interface UnmatchedGroup {
+  label: string;
+  students: string[];
+  workItems: WorkItem[];
+  reason: string;
+  /** @nullable */
+  suggestedGroupId: string | null;
+}
+
+export type RemovalResultPreservedEditsItem = {
+  groupId: string;
+  fields: string[];
+};
+
+export interface RemovalResult {
+  removedSnapshotId: string;
+  restoredGroupIds: string[];
+  preservedEdits: RemovalResultPreservedEditsItem[];
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -50,6 +76,9 @@ export interface StudentGroup {
   /** @nullable */
   summary: string | null;
   lastUpdated: string;
+  workItems?: WorkItem[];
+  /** @nullable */
+  matchMethod?: string | null;
 }
 
 export interface GroupInput {
@@ -74,6 +103,9 @@ export interface Snapshot {
   weekOf: string;
   fileName: string;
   createdAt: string;
+  source: string;
+  removable: boolean;
+  unmatchedGroups: UnmatchedGroup[];
   groups: StudentGroup[];
   summary: string;
   wins: string[];

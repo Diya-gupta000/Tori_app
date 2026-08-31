@@ -97,7 +97,7 @@ paths:
       operationId: synthesizeGroupSnapshot
       tags: [progress]
       summary: Synthesize an individual group's Kanban photo
-      description: Reads a photo for one group and updates only that group's progress record.
+      description: Reads a photo for one existing group and saves a removable synthesis with import results.
       parameters:
         - name: id
           in: path
@@ -112,13 +112,23 @@ paths:
               $ref: "#/components/schemas/GroupSnapshotInput"
       responses:
         "200":
-          description: Updated student group
+          description: Existing identical group synthesis (idempotent retry)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StudentGroup"
+                $ref: "#/components/schemas/Snapshot"
+        "201":
+          description: Saved group synthesis with import results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
         "404":
           description: Group not found
+        "409":
+          description: A conflicting synthesis already exists for this group and week
+        "503":
+          description: Photo synthesis is not configured
         "500":
           description: Synthesis failed
   /snapshots:
@@ -148,6 +158,12 @@ paths:
             schema:
               $ref: "#/components/schemas/SnapshotInput"
       responses:
+        "200":
+          description: Existing identical synthesis (idempotent retry)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
         "201":
           description: Synthesized snapshot
           content:
@@ -158,8 +174,82 @@ paths:
           description: Invalid board photo
         "500":
           description: Synthesis failed
+        "409":
+          description: A different synthesis already exists for this week
+        "503":
+          description: Photo synthesis is not configured
+  /snapshots/{id}:
+    delete:
+      operationId: removeSynthesis
+      tags: [progress]
+      summary: Remove a synthesis and safely restore its group updates
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Synthesis removed; later edits preserved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemovalResult"
+        "404":
+          description: Synthesis not found
+        "409":
+          description: Seeded baseline cannot be removed
 components:
   schemas:
+    WorkItem:
+      type: object
+      properties:
+        title:
+          type: string
+        details:
+          type: [string, "null"]
+      required: [title, details]
+    UnmatchedGroup:
+      type: object
+      properties:
+        label:
+          type: string
+        students:
+          type: array
+          items:
+            type: string
+        workItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItem"
+        reason:
+          type: string
+        suggestedGroupId:
+          type: [string, "null"]
+      required: [label, students, workItems, reason, suggestedGroupId]
+    RemovalResult:
+      type: object
+      properties:
+        removedSnapshotId:
+          type: string
+        restoredGroupIds:
+          type: array
+          items:
+            type: string
+        preservedEdits:
+          type: array
+          items:
+            type: object
+            properties:
+              groupId:
+                type: string
+              fields:
+                type: array
+                items:
+                  type: string
+            required: [groupId, fields]
+      required: [removedSnapshotId, restoredGroupIds, preservedEdits]
     HealthStatus:
       type: object
       properties:
@@ -199,6 +289,12 @@ components:
         lastUpdated:
           type: string
           format: date
+        workItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItem"
+        matchMethod:
+          type: [string, "null"]
       required: [id, name, project, students, color, status, progress, currentFocus, blocker, phase, summary, lastUpdated]
     GroupInput:
       type: object
@@ -243,6 +339,14 @@ components:
         createdAt:
           type: string
           format: date-time
+        source:
+          type: string
+        removable:
+          type: boolean
+        unmatchedGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/UnmatchedGroup"
         groups:
           type: array
           items:
@@ -257,7 +361,7 @@ components:
           type: array
           items:
             type: string
-      required: [id, weekOf, fileName, createdAt, groups, summary, wins, attentionItems]
+      required: [id, weekOf, fileName, createdAt, source, removable, unmatchedGroups, groups, summary, wins, attentionItems]
     SnapshotInput:
       type: object
       properties:
@@ -315,4 +419,3 @@ components:
           items:
             type: string
       required: [weekOf, totalGroups, onTrack, needsAttention, averageProgress, progressDelta, summary, groups, trend, attentionItems]
-
