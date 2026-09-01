@@ -4,12 +4,23 @@ A weekly Kanban photo synthesis dashboard for research lab teachers to track stu
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- Use Replit's **Run** button (`Project` workflow) to start the full app. Replit
+  discovers both artifact services and runs them together:
+  - `pnpm --filter @workspace/api-server run dev` — API service on Replit's
+    assigned port (declared as local port 8080)
+  - `pnpm --filter @workspace/lab-progress-board run dev` — web service on
+    Replit's assigned port (declared as local port 23288)
+- Replit's application router sends `/api/*` to the API service and all other
+  paths to the web service. The Vite proxy to port 3001 is only a convenience
+  for non-Replit local development.
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required Replit database configuration: `DATABASE_URL` — PostgreSQL connection string
+- Required Replit Secret for photo synthesis: `OPENAI_API_KEY`. The application
+  still loads without it; only a user-triggered synthesis returns a clear
+  configuration error.
 
 ## Stack
 
@@ -47,7 +58,9 @@ No project-specific preferences recorded.
 
 ## Gotchas
 
-- The photo synthesis route requires `OPENAI_API_KEY` in the workspace secrets.
+- Keep `OPENAI_API_KEY` in Replit Secrets. It is read only by the API server and
+  must never be added to frontend variables or committed environment files.
+- Clerk, Railway, and `APP_ORIGIN` variables are not used by this architecture.
 - The app workflow provides `PORT` and `BASE_PATH`; manual Vite production builds need those values set.
 
 ## Pointers
