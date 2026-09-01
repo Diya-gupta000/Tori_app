@@ -37,6 +37,11 @@ yarn-error.log
 testem.log
 /typings
 
+# Local environment files (Replit Secrets are injected as environment variables)
+.env
+.env.*
+!.env.example
+
 # System Files
 .DS_Store
 Thumbs.db
