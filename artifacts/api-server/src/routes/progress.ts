@@ -1,14 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { asc, count, desc, eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { phases, readBoard } from "../lib/board-reader";
 import { safeSynthesisError } from "../lib/synthesis-log";
 import { normalizeWeek } from "../lib/synthesis";
-import { findExistingSynthesis, SynthesisError } from "../lib/synthesis-store";
-import { adminAccess } from "../lib/access";
-import { validateImage } from '../lib/image';
-import { claimImport, completeImport, abandonImport, removeCoordinatedSynthesis } from '../lib/import-coordinator';
-import { activeRequest, withAbort } from '../lib/in-flight';
-import type { AppConfig } from '../lib/config';
+import { findExistingSynthesis, removeSynthesis, saveSynthesis, SynthesisError } from "../lib/synthesis-store";
 import {
   CreateGroupBody,
   SynthesizeSnapshotBody,
@@ -272,7 +268,6 @@ function snapshotForWeek(weekOf: string): SnapshotPayload {
 let seedDataPromise: Promise<void> | null = null;
 
 async function seedDataOnce() {
-  if (process.env.NODE_ENV === 'production') return;
   const existingGroups = await db.select({ id: labGroupsTable.id }).from(labGroupsTable);
   // Initialization must never reset a real roster (including manually added groups).
   if (existingGroups.length > 0) return;
@@ -452,7 +447,7 @@ router.get("/groups", async (_req, res) => {
   res.json(groups.map(toGroupPayload));
 });
 
-router.post("/groups", adminAccess, async (req, res) => {
+router.post("/groups", async (req, res) => {
   const parsed = CreateGroupBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Group name, project, and students are required." });
@@ -551,15 +546,14 @@ async function handleSynthesis(req: Request, res: Response, targetGroupId?: stri
     res.status(400).json({ error: "A board photo, file name, and week are required." });
     return;
   }
-  let claimId: string | null = null;
-  const active = activeRequest();
-  const onClose = () => { if (!res.writableFinished) active.controller.abort(); };
-  res.on('close', onClose);
   try {
     const { fileName, imageDataUrl } = parsed.data;
     const weekOf = normalizeWeek(parsed.data.weekOf.toISOString().slice(0, 10));
-    active.week(weekOf);
-    const { imageHash } = await validateImage(imageDataUrl);
+    const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(imageDataUrl);
+    if (!match) throw new SynthesisError(400, "Use a JPEG, PNG, or WebP photo.");
+    const image = Buffer.from(match[2], "base64");
+    if (!image.length || image.length > 16 * 1024 * 1024) throw new SynthesisError(400, "The photo must be between 1 byte and 16 MB.");
+    const imageHash = createHash("sha256").update(image).digest("hex");
     const existing = await findExistingSynthesis(weekOf, imageHash, targetGroupId);
     if (existing) {
       res.json(toSnapshotPayload(existing));
@@ -572,17 +566,8 @@ async function handleSynthesis(req: Request, res: Response, targetGroupId?: stri
       groupName = group.name;
     }
     if (!process.env.OPENAI_API_KEY) throw new SynthesisError(503, "Photo synthesis is not configured yet. Set OPENAI_API_KEY on the backend.");
-    const config = req.app.locals.config as AppConfig;
-    if (active.controller.signal.aborted) throw new SynthesisError(409, 'This upload was cancelled. Explicitly upload again if still wanted.');
-    const claim = await claimImport({ weekOf, imageHash, targetGroupId, userId: res.locals.identity.userId }, config);
-    if (claim.snapshot) { res.json(toSnapshotPayload(claim.snapshot)); return; }
-    claimId = claim.claimId;
-    active.claim(claimId);
-    const signal = AbortSignal.any([active.controller.signal, AbortSignal.timeout(config.synthesisTimeoutMs)]);
-    if (signal.aborted) throw new SynthesisError(409, 'This upload was cancelled before analysis.');
-    const reader = req.app.locals.boardReader as typeof readBoard;
-    const board = await withAbort(reader(imageDataUrl, weekOf, groupName, signal), signal);
-    const snapshot = await completeImport(claimId, { weekOf, fileName, imageHash, board, targetGroupId }, signal);
+    const board = await readBoard(imageDataUrl, weekOf, groupName);
+    const snapshot = await saveSynthesis({ weekOf, fileName, imageHash, board, targetGroupId });
     if (process.env.NODE_ENV !== "production") {
       req.log.info({ synthesisId: snapshot.id, extracted: board.groups.length,
         groupsUpdated: (snapshot.groups as unknown[]).length, groupsCreated: 0,
@@ -595,7 +580,6 @@ async function handleSynthesis(req: Request, res: Response, targetGroupId?: stri
     }
     res.status(201).json(toSnapshotPayload(snapshot));
   } catch (error) {
-    if (claimId) await abandonImport(claimId).catch((failure) => req.log.error(safeSynthesisError(failure), 'Could not release import claim; lease will expire'));
     if (error instanceof SynthesisError) {
       res.status(error.status).json({ error: error.message });
       return;
@@ -603,9 +587,6 @@ async function handleSynthesis(req: Request, res: Response, targetGroupId?: stri
     // Do not serialize SDK errors: they may contain request headers or image data.
     req.log.error(safeSynthesisError(error), "Board synthesis failed");
     res.status(500).json({ error: "The board could not be saved. No partial changes were kept. Please retry or use a clearer photo." });
-  } finally {
-    res.off('close', onClose);
-    active.release();
   }
 }
 
@@ -613,9 +594,9 @@ router.post("/snapshots/synthesize", async (req, res) => {
   await handleSynthesis(req, res);
 });
 
-router.delete("/snapshots/:id", adminAccess, async (req, res) => {
+router.delete("/snapshots/:id", async (req, res) => {
   try {
-    const result = await removeCoordinatedSynthesis(String(req.params.id), res.locals.identity.userId);
+    const result = await removeSynthesis(String(req.params.id));
     req.log.info({ synthesisId: result.removedSnapshotId, groupsRestored: result.restoredGroupIds.length,
       preservedEdits: result.preservedEdits }, "Synthesis removed");
     res.json(result);
