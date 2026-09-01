@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type ButtonHTMLAttributes } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Link, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
 import {
   ArrowLeft, ArrowRight, Beaker, CircleAlert,
@@ -17,11 +17,11 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { SynthesisResult } from '@/components/synthesis-result';
-import { TeamAuth, TeamUser, useTeam } from '@/components/team-auth';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import './index.css';
 
+const queryClient = new QueryClient();
 
 const statusStyles: Record<string, string> = {
   'On track': 'bg-[hsl(var(--accent)/.28)] text-[hsl(var(--foreground))]',
@@ -73,7 +73,9 @@ function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="mt-auto flex items-center gap-3 px-2 pt-6">
-          <TeamUser />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(var(--accent))] text-xs font-bold text-foreground">VJ</div>
+          <div className="min-w-0"><div className="truncate text-xs font-semibold">Victoria Johnson</div><div className="text-[10px] text-sidebar-foreground/45">Lab teacher</div></div>
+          <button type="button" aria-label="Open profile menu" data-testid="button-profile-menu" className="ml-auto text-sidebar-foreground/45 hover:text-sidebar-foreground"><MoreHorizontal size={16} /></button>
         </div>
       </aside>
       {mobileOpen && <button type="button" aria-label="Close navigation" data-testid="button-close-navigation" className="fixed inset-0 z-30 bg-foreground/25 md:hidden" onClick={() => setMobileOpen(false)} />}
@@ -85,7 +87,7 @@ function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--accent))]" />Sync is current</div>
-            <TeamUser />
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">VJ</div>
           </div>
         </header>
         <main className="mx-auto max-w-[1400px] px-5 py-8 md:px-9 lg:px-12">{children}</main>
@@ -264,7 +266,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 function GroupsPage() {
-  const { isAdmin } = useTeam();
   const { data, isLoading, isError, refetch } = useGetGroups();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
@@ -272,7 +273,7 @@ function GroupsPage() {
   const groups = useMemo(() => (data || []).filter((g) => `${g.name} ${g.project} ${g.students.join(' ')}`.toLowerCase().includes(search.toLowerCase())).filter((g) => filter === 'All' || g.status === filter), [data, search, filter]);
   if (isLoading) return <LoadingState label="Gathering groups" />;
   if (isError) return <ErrorState onRetry={() => refetch()} />;
-  return <div className="page-enter"><PageHeading eyebrow="Studio directory" title="Every group, one glance." description="Search the room by project, student, or status. Open a group to see how its work has moved week by week." action={isAdmin && <Button onClick={() => setCreateOpen(true)} data-testid="button-add-group"><Plus size={16} />Add group</Button>} /><div className="mb-5 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search groups, projects, students..." data-testid="input-search-groups" className="focus-ring h-10 w-full rounded-lg border border-input bg-card pl-9 pr-3 text-sm" /></div><div className="flex items-center gap-2 overflow-x-auto"><Filter size={15} className="shrink-0 text-muted-foreground" />{['All', 'On track', 'Needs attention', 'Blocked', 'Complete'].map((option) => <button type="button" key={option} onClick={() => setFilter(option)} data-testid={`button-filter-${option.toLowerCase().replaceAll(' ', '-')}`} className={cn('whitespace-nowrap rounded-lg border px-3 py-2 text-[11px] font-semibold lab-transition', filter === option ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground')}>{option}</button>)}</div></div>{groups.length ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{groups.map((group) => <GroupRow key={group.id} group={group} />)}</div> : <EmptyState kind="groups" action={isAdmin ? () => setCreateOpen(true) : undefined} />}{isAdmin && <GroupCreateDialog open={createOpen} onClose={() => setCreateOpen(false)} />}</div>;
+  return <div className="page-enter"><PageHeading eyebrow="Studio directory" title="Every group, one glance." description="Search the room by project, student, or status. Open a group to see how its work has moved week by week." action={<Button onClick={() => setCreateOpen(true)} data-testid="button-add-group"><Plus size={16} />Add group</Button>} /><div className="mb-5 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search groups, projects, students..." data-testid="input-search-groups" className="focus-ring h-10 w-full rounded-lg border border-input bg-card pl-9 pr-3 text-sm" /></div><div className="flex items-center gap-2 overflow-x-auto"><Filter size={15} className="shrink-0 text-muted-foreground" />{['All', 'On track', 'Needs attention', 'Blocked', 'Complete'].map((option) => <button type="button" key={option} onClick={() => setFilter(option)} data-testid={`button-filter-${option.toLowerCase().replaceAll(' ', '-')}`} className={cn('whitespace-nowrap rounded-lg border px-3 py-2 text-[11px] font-semibold lab-transition', filter === option ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground')}>{option}</button>)}</div></div>{groups.length ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{groups.map((group) => <GroupRow key={group.id} group={group} />)}</div> : <EmptyState kind="groups" action={() => setCreateOpen(true)} />}<GroupCreateDialog open={createOpen} onClose={() => setCreateOpen(false)} /></div>;
 }
 
 function GroupDetailPage() {
@@ -355,7 +356,6 @@ function SnapshotsPage() {
 }
 
 function SnapshotCard({ snapshot, featured }: { snapshot: Snapshot; featured: boolean }) {
-  const { isAdmin } = useTeam();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const removal = useRemoveSynthesis();
   const client = useQueryClient();
@@ -371,7 +371,7 @@ function SnapshotCard({ snapshot, featured }: { snapshot: Snapshot; featured: bo
   return <article className={cn('lab-card rounded-xl p-5 md:p-6', featured && 'border-[hsl(var(--accent)/.6)]')} data-testid={`card-snapshot-${snapshot.id}`}><div className="flex flex-col gap-5 md:flex-row md:items-start"><div className="flex-1"><div className="flex flex-wrap items-center gap-3"><span className="eyebrow">{featured ? 'Latest synthesis' : 'Archived synthesis'}</span><span className="mono rounded bg-muted px-2 py-1 text-[10px]">{formatDate(snapshot.weekOf)}</span></div><h2 className="serif mt-3 text-[25px]">{snapshot.summary || 'Weekly synthesis'}</h2><div className="mt-4 flex items-center gap-4 text-[11px] text-muted-foreground"><span className="flex items-center gap-1.5"><FileImage size={13} />{snapshot.fileName}</span><span className="text-border">·</span><span>{snapshot.groups?.length || 0} groups read</span></div></div><div className="grid grid-cols-2 gap-2 md:w-[260px]"><div className="rounded-lg bg-[hsl(var(--accent)/.2)] p-3"><div className="eyebrow !text-foreground/55">Wins</div><div className="mono mt-2 text-xl">{snapshot.wins?.length || 0}</div></div><div className="rounded-lg bg-[hsl(var(--secondary)/.22)] p-3"><div className="eyebrow !text-foreground/55">Signals</div><div className="mono mt-2 text-xl">{snapshot.attentionItems?.length || 0}</div></div></div></div>{((snapshot.wins?.length || 0) > 0 || (snapshot.attentionItems?.length || 0) > 0) && <div className="mt-6 grid gap-5 border-t border-border pt-5 md:grid-cols-2"><ListBlock title="What moved" items={snapshot.wins || []} tone="mint" /><ListBlock title="Keep close" items={snapshot.attentionItems || []} tone="sand" /></div>}
     {snapshot.removable && <div className="mt-5 border-t border-border pt-4">
       <details><summary className="cursor-pointer text-xs font-semibold">View matched groups and review unmatched results</summary><div className="mt-3"><SynthesisResult snapshot={snapshot} /></div></details>
-      {isAdmin && <Button variant="quiet" className="mt-3 text-destructive" onClick={() => { removal.reset(); setConfirmOpen(true); }} data-testid={`remove-synthesis-${snapshot.id}`}>Remove synthesis</Button>}
+      <Button variant="quiet" className="mt-3 text-destructive" onClick={() => { removal.reset(); setConfirmOpen(true); }} data-testid={`remove-synthesis-${snapshot.id}`}>Remove synthesis</Button>
       <AlertDialog open={confirmOpen} onOpenChange={(open) => { if (!removal.isPending) setConfirmOpen(open); }}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove the {formatDate(snapshot.weekOf)} synthesis?</AlertDialogTitle>
           <AlertDialogDescription>The weekly synthesis and group updates created from this board will be removed. Groups themselves will not be deleted. Later manual edits will be preserved.</AlertDialogDescription></AlertDialogHeader>
@@ -400,7 +400,7 @@ function Router() {
 }
 
 function App() {
-  return <TeamAuth><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></TeamAuth>;
+  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>;
 }
 
 export default App;

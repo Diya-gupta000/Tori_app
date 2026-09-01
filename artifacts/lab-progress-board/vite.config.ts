@@ -5,8 +5,7 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-export default defineConfig(async ({ command }) => {
-const rawPort = process.env.PORT || (command === 'build' ? '3000' : undefined);
+const rawPort = process.env.PORT;
 
 if (!rawPort) {
   throw new Error(
@@ -28,12 +27,12 @@ if (!basePath) {
   );
 }
 
-return {
+export default defineConfig({
   base: basePath,
   plugins: [
     react(),
     tailwindcss(),
-    ...(command === 'serve' ? [runtimeErrorOverlay()] : []),
+    runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== 'production' &&
     process.env.REPL_ID !== undefined
       ? [
@@ -82,5 +81,4 @@ return {
     host: '0.0.0.0',
     allowedHosts: true,
   },
-};
 });

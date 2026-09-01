@@ -4,9 +4,6 @@ info:
   title: Api
   version: 0.1.0
   description: API specification
-security:
-  - sessionCookie: []
-  - sessionBearer: []
 servers:
   - url: /api
     description: Base API path
@@ -19,7 +16,6 @@ paths:
   /healthz:
     get:
       operationId: healthCheck
-      security: []
       tags: [health]
       summary: Health check
       description: Returns server health status
@@ -30,34 +26,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-  /readyz:
-    get:
-      operationId: readinessCheck
-      security: []
-      tags: [health]
-      summary: Check database and migrated tables
-      responses:
-        "200":
-          description: Ready
-        "503":
-          description: Database unavailable or required schema missing
-  /session:
-    get:
-      operationId: getTeamSession
-      tags: [progress]
-      summary: Verified Tori team identity and admin capability
-      responses:
-        "200":
-          description: Current team identity
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [userId, orgId, isAdmin]
-                properties:
-                  userId: { type: string }
-                  orgId: { type: string }
-                  isAdmin: { type: boolean }
   /dashboard:
     get:
       operationId: getDashboard
@@ -233,15 +201,6 @@ paths:
         "409":
           description: Seeded baseline cannot be removed
 components:
-  securitySchemes:
-    sessionCookie:
-      type: apiKey
-      in: cookie
-      name: __session
-    sessionBearer:
-      type: http
-      scheme: bearer
-      bearerFormat: Clerk session JWT
   schemas:
     WorkItem:
       type: object

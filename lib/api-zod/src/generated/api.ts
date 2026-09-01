@@ -18,22 +18,6 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary Check database and migrated tables
- */
-export const ReadinessCheckResponse = zod.unknown()
-
-
-/**
- * @summary Verified Tori team identity and admin capability
- */
-export const GetTeamSessionResponse = zod.object({
-  "userId": zod.string(),
-  "orgId": zod.string(),
-  "isAdmin": zod.boolean()
-})
-
-
-/**
  * Returns the current lab overview, trend data, and attention items.
  * @summary Get the teacher dashboard
  */
